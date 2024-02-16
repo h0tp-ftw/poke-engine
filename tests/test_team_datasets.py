@@ -1,8 +1,8 @@
 from unittest import TestCase
 
-import constants
-from data.team_datasets import _TeamDatasets, PokemonSet, PokemonMoveset
-from showdown.battle import Pokemon, Move, StatRange
+from poke_engine import constants
+from poke_engine.data.team_datasets import _TeamDatasets, PokemonSet, PokemonMoveset
+from poke_engine.battle import Pokemon, Move, StatRange
 
 
 class TestTeamDatasets(TestCase):

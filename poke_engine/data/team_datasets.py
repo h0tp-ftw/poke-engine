@@ -8,11 +8,11 @@ import typing
 from typing import Tuple
 from typing import Optional
 
-import constants
-from showdown.engine.helpers import calculate_stats
+from .. import constants
+from ..helpers import calculate_stats
 
 if typing.TYPE_CHECKING:
-    from showdown.battle import Pokemon
+    from ..battle import Pokemon
 
 logger = logging.getLogger(__name__)
 
