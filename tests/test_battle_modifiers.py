@@ -2,47 +2,47 @@ import unittest
 import json
 from collections import defaultdict
 
-import constants
-from showdown.engine.helpers import calculate_stats
+from poke_engine import constants
+from poke_engine.helpers import calculate_stats
 
-from showdown.battle import Battle
-from showdown.battle import Pokemon
-from showdown.battle import Move
-from showdown.battle import LastUsedMove
-from showdown.battle import DamageDealt
+from poke_engine.battle import Battle
+from poke_engine.battle import Pokemon
+from poke_engine.battle import Move
+from poke_engine.battle import LastUsedMove
+from poke_engine.battle import DamageDealt
 
-from showdown.battle_modifier import request
-from showdown.battle_modifier import terastallize
-from showdown.battle_modifier import activate
-from showdown.battle_modifier import prepare
-from showdown.battle_modifier import switch_or_drag
-from showdown.battle_modifier import clearallboost
-from showdown.battle_modifier import heal_or_damage
-from showdown.battle_modifier import swapsideconditions
-from showdown.battle_modifier import move
-from showdown.battle_modifier import boost
-from showdown.battle_modifier import unboost
-from showdown.battle_modifier import status
-from showdown.battle_modifier import weather
-from showdown.battle_modifier import curestatus
-from showdown.battle_modifier import start_volatile_status
-from showdown.battle_modifier import end_volatile_status
-from showdown.battle_modifier import set_ability
-from showdown.battle_modifier import set_opponent_ability_from_ability_tag
-from showdown.battle_modifier import form_change
-from showdown.battle_modifier import zpower
-from showdown.battle_modifier import clearnegativeboost
-from showdown.battle_modifier import check_speed_ranges
-from showdown.battle_modifier import check_choicescarf
-from showdown.battle_modifier import check_heavydutyboots
-from showdown.battle_modifier import get_damage_dealt
-from showdown.battle_modifier import singleturn
-from showdown.battle_modifier import transform
-from showdown.battle_modifier import update_battle
-from showdown.battle_modifier import upkeep
-from showdown.battle_modifier import inactive
+from poke_engine.battle_modifier import request
+from poke_engine.battle_modifier import terastallize
+from poke_engine.battle_modifier import activate
+from poke_engine.battle_modifier import prepare
+from poke_engine.battle_modifier import switch_or_drag
+from poke_engine.battle_modifier import clearallboost
+from poke_engine.battle_modifier import heal_or_damage
+from poke_engine.battle_modifier import swapsideconditions
+from poke_engine.battle_modifier import move
+from poke_engine.battle_modifier import boost
+from poke_engine.battle_modifier import unboost
+from poke_engine.battle_modifier import status
+from poke_engine.battle_modifier import weather
+from poke_engine.battle_modifier import curestatus
+from poke_engine.battle_modifier import start_volatile_status
+from poke_engine.battle_modifier import end_volatile_status
+from poke_engine.battle_modifier import set_ability
+from poke_engine.battle_modifier import set_opponent_ability_from_ability_tag
+from poke_engine.battle_modifier import form_change
+from poke_engine.battle_modifier import zpower
+from poke_engine.battle_modifier import clearnegativeboost
+from poke_engine.battle_modifier import check_speed_ranges
+from poke_engine.battle_modifier import check_choicescarf
+from poke_engine.battle_modifier import check_heavydutyboots
+from poke_engine.battle_modifier import get_damage_dealt
+from poke_engine.battle_modifier import singleturn
+from poke_engine.battle_modifier import transform
+from poke_engine.battle_modifier import update_battle
+from poke_engine.battle_modifier import upkeep
+from poke_engine.battle_modifier import inactive
 
-from showdown.engine.objects import boost_multiplier_lookup
+from poke_engine.objects import boost_multiplier_lookup
 
 
 # so we can instantiate a Battle object for testing

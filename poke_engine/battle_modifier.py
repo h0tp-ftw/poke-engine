@@ -3,19 +3,19 @@ import json
 from copy import deepcopy
 import logging
 
-import constants
-from data import all_move_json
-from data import pokedex
-from battle import Pokemon
-from battle import LastUsedMove
-from battle import DamageDealt
-from battle import StatRange
-from helpers import normalize_name
-from helpers import get_pokemon_info_from_condition
-from helpers import calculate_stats
-from find_state_instructions import get_effective_speed
-from damage_calculator import calculate_damage
-from objects import boost_multiplier_lookup
+from . import constants
+from .data import all_move_json
+from .data import pokedex
+from .battle import Pokemon
+from .battle import LastUsedMove
+from .battle import DamageDealt
+from .battle import StatRange
+from .helpers import normalize_name
+from .helpers import get_pokemon_info_from_condition
+from .helpers import calculate_stats
+from .find_state_instructions import get_effective_speed
+from .damage_calculator import calculate_damage
+from .objects import boost_multiplier_lookup
 
 
 logger = logging.getLogger(__name__)
