@@ -1,9 +1,8 @@
 import unittest
 
-import constants
-from showdown.engine.objects import State
-from showdown.battle import Pokemon as StatePokemon
-from showdown.engine.objects import Pokemon
+from poke_engine import constants
+from poke_engine.objects import State, Pokemon
+from poke_engine.battle import Pokemon as StatePokemon
 
 
 class TestPokemonInit(unittest.TestCase):
