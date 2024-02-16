@@ -1,7 +1,7 @@
 import unittest
-from data import all_move_json
-import constants
-from showdown.engine.special_effects.moves.modify_move import modify_attack_being_used
+from poke_engine.data import all_move_json
+from poke_engine import constants
+from poke_engine.special_effects.moves.modify_move import modify_attack_being_used
 
 
 class TestSuckerPunch(unittest.TestCase):
