@@ -1,4 +1,4 @@
-import constants
+from ... import constants
 
 
 def knockoff(state, attacker, defender, attacking_side, defending_side, move_hit, hit_sub):

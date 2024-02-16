@@ -1,4 +1,4 @@
-import constants
+from . import constants
 
 
 def switch_out_move_triggered(move, damage_amounts):

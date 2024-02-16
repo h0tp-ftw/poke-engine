@@ -1,4 +1,4 @@
-import constants
+from ... import constants
 
 from ...damage_calculator import is_super_effective
 

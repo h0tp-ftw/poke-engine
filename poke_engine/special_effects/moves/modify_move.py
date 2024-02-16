@@ -1,5 +1,5 @@
-import constants
-from data import pokedex
+from ... import constants
+from ...data import pokedex
 from ...damage_calculator import is_super_effective
 
 

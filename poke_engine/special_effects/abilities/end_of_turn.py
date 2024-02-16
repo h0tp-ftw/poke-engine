@@ -1,4 +1,4 @@
-import constants
+from ... import constants
 
 
 def poisonheal(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):

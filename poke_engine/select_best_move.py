@@ -1,10 +1,10 @@
 import math
 from collections import defaultdict
 
-import constants
+from . import constants
 
-from evaluate import evaluate
-from find_state_instructions import get_all_state_instructions
+from .evaluate import evaluate
+from .find_state_instructions import get_all_state_instructions
 
 
 WON_BATTLE = 100

@@ -1,20 +1,20 @@
 from copy import copy
 
-import constants
-from config import ShowdownConfig
-from data import all_move_json
+from . import constants
+from .config import ShowdownConfig
+from .data import all_move_json
 
-import instruction_generator
-from damage_calculator import _calculate_damage
-from objects import TransposeInstruction
-from special_effects.abilities.modify_attack_against import ability_modify_attack_against
-from special_effects.abilities.modify_attack_being_used import ability_modify_attack_being_used
-from special_effects.items.modify_attack_against import item_modify_attack_against
-from special_effects.items.modify_attack_being_used import item_modify_attack_being_used
-from special_effects.moves.modify_move import modify_attack_being_used
-from special_effects.abilities.before_move import ability_before_move
-from switch_out_moves import switch_out_move_triggered
-from switch_out_moves import get_best_switch_pokemon
+from . import instruction_generator
+from .damage_calculator import _calculate_damage
+from .objects import TransposeInstruction
+from .special_effects.abilities.modify_attack_against import ability_modify_attack_against
+from .special_effects.abilities.modify_attack_being_used import ability_modify_attack_being_used
+from .special_effects.items.modify_attack_against import item_modify_attack_against
+from .special_effects.items.modify_attack_being_used import item_modify_attack_being_used
+from .special_effects.moves.modify_move import modify_attack_being_used
+from .special_effects.abilities.before_move import ability_before_move
+from .switch_out_moves import switch_out_move_triggered
+from .switch_out_moves import get_best_switch_pokemon
 
 
 def lookup_move(move_name):

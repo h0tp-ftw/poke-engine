@@ -1,9 +1,9 @@
 from copy import copy
 from copy import deepcopy
 
-import constants
-from data import all_move_json
-from data import pokedex
+from . import constants
+from .data import all_move_json
+from .data import pokedex
 
 
 pokemon_type_indicies = {

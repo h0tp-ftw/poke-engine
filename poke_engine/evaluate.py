@@ -1,5 +1,5 @@
-import constants
-from data import effectiveness
+from . import constants
+from .data import effectiveness
 
 
 class Scoring:

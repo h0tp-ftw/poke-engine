@@ -1,4 +1,4 @@
-import constants
+from ... import constants
 
 
 def leftovers(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):

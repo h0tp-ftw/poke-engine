@@ -1,4 +1,4 @@
-import constants
+from ... import constants
 
 
 def trickroom(mutator, attacking_side_string, attacking_side, attacking_pokemon, defending_pokemon):

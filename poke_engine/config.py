@@ -6,7 +6,7 @@ from typing import Union
 
 from environs import Env
 
-import constants
+from . import constants
 
 env = Env()
 env.read_env(path="env", recurse=False)

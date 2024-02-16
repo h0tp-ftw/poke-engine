@@ -1,15 +1,15 @@
 from copy import copy
 
-import constants
+from . import constants
 import logging
 
-from damage_calculator import type_effectiveness_modifier
-from special_effects.abilities.on_switch_in import ability_on_switch_in
-from special_effects.items.on_switch_in import item_on_switch_in
-from special_effects.items.end_of_turn import item_end_of_turn
-from special_effects.abilities.end_of_turn import ability_end_of_turn
-from special_effects.moves.after_move import after_move
-from special_effects.moves import move_special_effect
+from .damage_calculator import type_effectiveness_modifier
+from .special_effects.abilities.on_switch_in import ability_on_switch_in
+from .special_effects.items.on_switch_in import item_on_switch_in
+from .special_effects.items.end_of_turn import item_end_of_turn
+from .special_effects.abilities.end_of_turn import ability_end_of_turn
+from .special_effects.moves.after_move import after_move
+from .special_effects.moves import move_special_effect
 
 logger = logging.getLogger(__name__)
 
@@ -920,7 +920,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
         if side.future_sight[0] == 1:
-            from showdown.engine.damage_calculator import calculate_futuresight_damage
+            from poke_engine.damage_calculator import calculate_futuresight_damage
             damage_dealt = calculate_futuresight_damage(
                 mutator.state,
                 attacker,
