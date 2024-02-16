@@ -1,12 +1,12 @@
 import unittest
 
-from showdown.battle import Move
-from showdown.engine.helpers import get_pokemon_info_from_condition
-from showdown.engine.helpers import normalize_name
-from showdown.engine.helpers import set_makes_sense
-from showdown.engine.helpers import spreads_are_alike
-from showdown.engine.helpers import remove_duplicate_spreads
-from showdown.engine.objects import State
+from poke_engine.battle import Move
+from poke_engine.helpers import get_pokemon_info_from_condition
+from poke_engine.helpers import normalize_name
+from poke_engine.helpers import set_makes_sense
+from poke_engine.helpers import spreads_are_alike
+from poke_engine.helpers import remove_duplicate_spreads
+from poke_engine.objects import State
 
 
 class TestBattleIsOver(unittest.TestCase):
