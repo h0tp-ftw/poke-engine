@@ -1,4 +1,4 @@
-# Battle-Engine
+# poke-engine
 This project is a fork of [pmariglia's showdown bots](https://github.com/pmariglia/showdown) project (meant to be an application) that extracts the battle 
 engine and creates an installable package.
 
@@ -8,8 +8,6 @@ It can be used to determine the different types of transpositions a pair of move
 This battle engine is meant to capture important aspects of Pokemon for the purposes of competitive single battles.
 It is nowhere near as complete or robust as the [PokemonShowdown](https://github.com/smogon/pokemon-showdown) battle engine.
 
-This code is always being improved and pull requests are very much welcome!
-
 ## Using the Battle Engine
 The battle engine operates using State, Side, and Pokemon objects.
 
@@ -17,7 +15,7 @@ Note that any string values used within the engine (pokemon names, move names, a
 
 To convert values you can use the `normalize_name` function
 ```python
->>> from showdown.engine.helpers import normalize_name
+>>> from poke_engine.helpers import normalize_name
 >>> normalize_name('Pikachu')
 'pikachu'
 >>> normalize_name('Choice Scarf')
@@ -31,7 +29,7 @@ To convert values you can use the `normalize_name` function
 ### The Pokemon Object
 
 ```python
-from showdown.engine import Pokemon
+from poke_engine import Pokemon
 pokemon = Pokemon(
     # mandatory upon initialization
     identifier='pikachu',
@@ -80,8 +78,8 @@ This object represents one side of battle.
 It contains an `active` Pokemon , a dictionary of `reserve` Pokemon, and a dictionary of `side_conditions`
 
 ```python
-from showdown.engine import Side
-from showdown.engine import Pokemon
+from poke_engine import Side
+from poke_engine import Pokemon
 side = Side(
     active=Pokemon(...),
     reserve={
@@ -104,8 +102,8 @@ side = Side(
 This object represents the entire battle.
 
 ```python
-from showdown.engine import State
-from showdown.engine import Side
+from poke_engine import State
+from poke_engine import Side
 state = State(
     user=Side(...),
     opponent=Side(...),
@@ -123,8 +121,8 @@ The primary feature of this battle engine is the ability to generate and apply i
 
 Instructions are a list of tuples. They can be applied and reversed to mutate the state.
 ```python
-from showdown.engine import State
-from showdown.engine import StateMutator
+from poke_engine import State
+from poke_engine import StateMutator
 
 state = State(...)  # initialize your state
 
@@ -160,9 +158,9 @@ Obviously, changes to the state will affect the generated instructions
 
 Example: tackle being used by both combatants
 ```python
->> from showdown.engine import State
->> from showdown.engine import StateMutator
->> from showdown.engine import get_all_state_instructions
+>> from poke_engine import State
+>> from poke_engine import StateMutator
+>> from poke_engine import get_all_state_instructions
 
 >> state = State(...)  # initialize your state
 
@@ -186,9 +184,9 @@ Example: tackle being used by both combatants
 
 Example: thunderbolt being used by both combatants
 ```python
->> from showdown.engine import State
->> from showdown.engine import StateMutator
->> from showdown.engine import get_all_state_instructions
+>> from poke_engine import State
+>> from poke_engine import StateMutator
+>> from poke_engine import get_all_state_instructions
 
 >> state = State(...)  # initialize your state
 >> mutator = StateMutator(state)
