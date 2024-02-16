@@ -1,13 +1,13 @@
 import unittest
 from unittest import mock
 
-import constants
+from poke_engine import constants
 
-from showdown.battle import LastUsedMove
-from showdown.battle import Battle
-from showdown.battle import Battler
-from showdown.battle import Pokemon
-from showdown.battle import Move
+from poke_engine.battle import LastUsedMove
+from poke_engine.battle import Battle
+from poke_engine.battle import Battler
+from poke_engine.battle import Pokemon
+from poke_engine.battle import Move
 
 
 # so we can instantiate a Battle object for testing
@@ -580,11 +580,11 @@ class TestGetPossibleItems(unittest.TestCase):
 
 class TestConvertToMega(unittest.TestCase):
     def setUp(self):
-        self.get_mega_name_patch = mock.patch('showdown.battle.get_mega_pkmn_name')
+        self.get_mega_name_patch = mock.patch('poke_engine.battle.get_mega_pkmn_name')
         self.addCleanup(self.get_mega_name_patch.stop)
         self.get_mega_name_mock = self.get_mega_name_patch.start()
 
-        self.pkmn_sets_patch = mock.patch('showdown.battle.data')
+        self.pkmn_sets_patch = mock.patch('poke_engine.battle.data')
         self.addCleanup(self.pkmn_sets_patch.stop)
         self.pkmn_sets_mock = self.pkmn_sets_patch.start()
 
