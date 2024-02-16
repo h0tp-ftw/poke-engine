@@ -2,12 +2,12 @@ import unittest
 from unittest import mock
 from datetime import date
 
-from data.parse_smogon_stats import get_smogon_stats_file_name
+from poke_engine.data.parse_smogon_stats import get_smogon_stats_file_name
 
 
 class TestGetSmogonStatsFileName(unittest.TestCase):
     def setUp(self):
-        self.datetime_patch = mock.patch('data.parse_smogon_stats.datetime')
+        self.datetime_patch = mock.patch('poke_engine.data.parse_smogon_stats.datetime')
         self.addCleanup(self.datetime_patch.stop)
         self.datetime_mock = self.datetime_patch.start()
 
