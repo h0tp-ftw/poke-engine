@@ -15,9 +15,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/SirSkaro/poke-engine",
-    packages=setuptools.find_packages(include=["poke_engine", "poke_engine.*"], exclude=["tests.*", "tests"]),
+    packages=setuptools.find_packages(include=["poke_engine", "poke_engine.*"], exclude=["tests"]),
     package_data={"poke_engine": ["**/*.json"]},
-    include_package_data=True,
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU GENERAL PUBLIC",
