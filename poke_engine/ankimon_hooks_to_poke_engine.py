@@ -1,3 +1,4 @@
+# ANKIMON-SPECIFIC - This entire file is made to connect Ankimon to poke-engine
 import random
 from collections import defaultdict
 import copy
