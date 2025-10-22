@@ -221,8 +221,13 @@ moves_dict["explosion"]["heal"] = [-1, 1]
 
 moves_dict["healingwish"]["heal_target"] = "self"
 
-moves_dict["curse"]["boosts"] = {"attack": 1, "defense": 1, "speed": -1}
-moves_dict["curse"]["target"] = "normal"
+# Curse is handled via special-effects:
+#  - Non-Ghost: self boosts (+1 Atk, +1 Def, -1 Spe)
+#  - Ghost: self-sacrifice 1/2 max HP and apply a ghost-curse to target
+# Remove static boosts/volatile from the move data to avoid double-applying.
+moves_dict["curse"].pop("boosts", None)
+moves_dict["curse"].pop("volatileStatus", None)
+moves_dict["curse"]["target"] = "self"
 
 moves_dict["defog"]["boosts"] = {"evasion": -1}
 

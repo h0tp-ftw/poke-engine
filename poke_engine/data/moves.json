@@ -2856,11 +2856,6 @@
     "curse": {
         "accuracy": true,
         "basePower": 0,
-        "boosts": {
-            "attack": 1,
-            "defense": 1,
-            "speed": -1
-        },
         "category": "status",
         "flags": {
             "bypasssub": 1,
@@ -2871,9 +2866,8 @@
         "pp": 10,
         "priority": 0,
         "secondary": null,
-        "target": "normal",
-        "type": "ghost",
-        "volatileStatus": "curse"
+        "target": "self",
+        "type": "ghost"
     },
     "cut": {
         "accuracy": 95,

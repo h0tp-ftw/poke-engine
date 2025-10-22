@@ -1134,6 +1134,17 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             mutator.apply_one(partially_trapped_damage_instruction)
             instruction.add_instruction(partially_trapped_damage_instruction)
 
+        # Ghost-type Curse residual damage
+        if constants.VOLATILE_CURSE_GHOST in pkmn.volatile_status:
+            damage_taken = max(0, int(min(pkmn.maxhp * 0.25, pkmn.hp)))
+            curse_damage_instruction = (
+                constants.MUTATOR_DAMAGE,
+                attacker,
+                damage_taken
+            )
+            mutator.apply_one(curse_damage_instruction)
+            instruction.add_instruction(curse_damage_instruction)
+
     # disable not used moves if choice-item is held
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
