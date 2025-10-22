@@ -121,7 +121,8 @@ VOLATILE_INFATUATION = 'infatuation'
 
 # Damage over time
 VOLATILE_LEECH_SEED = 'leech_seed'
-VOLATILE_CURSE_GHOST = 'curse_ghost'
+# Ghost-type Curse volatile name (aligns with KNOWN_VOLATILE_STATUSES)
+VOLATILE_CURSE_GHOST = 'curseghost'
 VOLATILE_NIGHTMARE = 'nightmare'
 VOLATILE_PERISH_SONG = 'perish_song'
 VOLATILE_SALT_CURE = 'salt_cure'

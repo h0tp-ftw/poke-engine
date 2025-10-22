@@ -99,3 +99,39 @@ def icespinner(mutator, attacking_side_string, attacking_side, attacking_pokemon
         return [
             (constants.MUTATOR_FIELD_END, mutator.state.field)
         ]
+
+
+def curse(mutator, attacking_side_string, attacking_side, attacking_pokemon, defending_pokemon):
+    """Implements dual-behavior for Curse.
+
+    - If the attacker is non-Ghost: apply +1 Atk, +1 Def, -1 Spe to the user.
+    - If the attacker is Ghost: user loses half max HP and target is afflicted with a
+      ghost-curse volatile that damages them each end of turn.
+    """
+    instructions = []
+
+    # Determine defender side string
+    defender_side_string = constants.USER if attacking_side_string == constants.OPPONENT else constants.OPPONENT
+
+    if 'ghost' in attacking_pokemon.types:
+        # Self HP halving (cannot exceed current HP)
+        half_hp = int(attacking_pokemon.maxhp * 0.5)
+        damage_amount = min(attacking_pokemon.hp, half_hp)
+        if damage_amount > 0:
+            instructions.append(
+                (constants.MUTATOR_DAMAGE, attacking_side_string, damage_amount)
+            )
+
+        # Apply the ghost-curse volatile to the defender
+        instructions.append(
+            (constants.MUTATOR_APPLY_VOLATILE_STATUS, defender_side_string, constants.VOLATILE_CURSE_GHOST)
+        )
+    else:
+        # Non-ghost: apply boosts to self
+        instructions.extend([
+            (constants.MUTATOR_BOOST, attacking_side_string, constants.ATTACK, 1),
+            (constants.MUTATOR_BOOST, attacking_side_string, constants.DEFENSE, 1),
+            (constants.MUTATOR_BOOST, attacking_side_string, constants.SPEED, -1),
+        ])
+
+    return instructions
