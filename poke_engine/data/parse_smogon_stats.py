@@ -1,7 +1,6 @@
 import logging
 import ntpath
 from datetime import datetime
-from dateutil import relativedelta
 
 import requests
 
@@ -21,25 +20,28 @@ EFFECTIVENESS = "effectiveness"
 def get_smogon_stats_file_name(game_mode, month_delta=1):
     """
     Gets the smogon stats url based on the game mode
-    Uses the previous-month's statistics
+    Uses the previous-month's statistics (pure Python implementation)
     """
-
-    # blitz comes and goes - use the non-blitz version
+    # Blitz handling remains the same
     if game_mode.endswith('blitz'):
         game_mode = game_mode[:-5]
 
-    # always use the `-0` file - the higher ladder is for noobs
-    smogon_url = "https://www.smogon.com/stats/{}-{}/chaos/{}-0.json"
+    # Calculate previous month without dateutil
+    current_date = datetime.now()
+    year = current_date.year
+    month = current_date.month
 
-    previous_month = datetime.now() - relativedelta.relativedelta(months=month_delta)
-    year = previous_month.year
-    month = "{:02d}".format(previous_month.month)
+    # Calculate previous month(s) using basic arithmetic
+    total_months = year * 12 + month - 1  # -1 to make months 0-based
+    total_months -= month_delta
+    year = total_months // 12
+    month = (total_months % 12) + 1  # Convert back to 1-based
 
-    return smogon_url.format(year, month, game_mode)
+    return f"https://www.smogon.com/stats/{year}-{month:02d}/chaos/{game_mode}-0.json"
 
 
 def pokemon_is_similar(normalized_name, list_of_pkmn_names):
-    return (
+    return (  # Original implementation preserved
         any(normalized_name.startswith(n) for n in list_of_pkmn_names) or
         any(n.startswith(normalized_name) for n in list_of_pkmn_names)
     )
@@ -47,21 +49,27 @@ def pokemon_is_similar(normalized_name, list_of_pkmn_names):
 
 def get_pokemon_information(smogon_stats_url, pkmn_names=None):
     r = requests.get(smogon_stats_url)
+
+    # Modified fallback calculation without relativedelta
     if r.status_code == 404:
-        r = requests.get(get_smogon_stats_file_name(ntpath.basename(smogon_stats_url.replace('-0.json', '')), month_delta=2))
+        base_name = ntpath.basename(smogon_stats_url.replace('-0.json', ''))
+        fallback_url = get_smogon_stats_file_name(base_name, month_delta=2)
+        r = requests.get(fallback_url)
 
     infos = r.json()['data']
     final_infos = {}
+
+    # Rest of the original implementation remains unchanged
     for pkmn_name, pkmn_information in infos.items():
         normalized_name = normalize_name(pkmn_name)
 
-        # if `pkmn_names` is provided, only find data on pkmn in that list
         if (
             pkmn_names and
             normalized_name not in pkmn_names and
             not pokemon_is_similar(normalized_name, pkmn_names)
         ):
             continue
+
         else:
             logger.debug("Adding {} to sets lookup for this battle".format(normalized_name))
 
