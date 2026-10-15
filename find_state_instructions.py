@@ -212,6 +212,7 @@ def cannot_use_move(attacking_pokemon, attacking_move):
 
 def get_state_instructions_from_move(mutator, attacking_move, defending_move, attacker, defender, first_move, instructions):
     instructions.frozen = False
+    instructions.damage_dealt = 0
 
     if constants.SWITCH_STRING in attacking_move:
         return [instruction_generator.get_instructions_from_switch(mutator, attacker, attacking_move[constants.SWITCH_STRING], instructions)]
@@ -425,6 +426,11 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
         for instruction_set in all_instructions:
             temp_instructions += instruction_generator.get_instructions_from_flinching_moves(defender, flinch_accuracy, first_move, instruction_set)
         all_instructions = temp_instructions
+
+    temp_instructions = []
+    for instruction_set in all_instructions:
+        temp_instructions += instruction_generator.get_instructions_from_item_after_move(mutator, attacker, attacking_move, instruction_set)
+    all_instructions = temp_instructions
 
     if constants.DRAG in attacking_move[constants.FLAGS] and attacking_move[constants.ACCURACY]:
         temp_instructions = []

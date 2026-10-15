@@ -163,6 +163,7 @@ def sheerforce(attacking_move, defending_move, attacking_pokemon, defending_poke
         attacking_move = attacking_move.copy()
         attacking_move[constants.SECONDARY] = False
         attacking_move[constants.BASE_POWER] *= 1.3
+        attacking_move[constants.SHEER_FORCE_BOOSTED] = True
     return attacking_move
 
 

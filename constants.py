@@ -396,6 +396,8 @@ SOUND = "sound"
 
 VOLATILE_STATUS = "volatileStatus"
 SECONDARY = "secondary"
+SHEER_FORCE_BOOSTED = "sheer_force_boosted"
+SYNTHETIC_DAMAGE = "synthetic_damage"
 CHANCE = "chance"
 LOCKED_MOVE = "lockedmove"
 

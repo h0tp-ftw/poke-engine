@@ -223,3 +223,19 @@ Notice that damage calculations are constant per move. This is done for simplici
 This behaviour can be changed by setting a global configuration value.
 
 Obviously, if this is done then the number of instructions generated will become very large even for simple pairs of moves
+
+## Adding an after-move held item
+
+Add a handler and register its normalized item name in `item_lookup` in
+`special_effects/items/after_move.py`. The handler receives the current state,
+holder and opponent, modified move, and `damage_dealt`, then returns mutator
+instructions. No application-side hook is needed.
+
+The engine calls this stage after contact abilities, move effects and recovery,
+before drag or pivot switches. Each outcome carries its own landed damage, capped
+to the target's HP or Substitute and reset for the next move; misses, prevented
+moves and HP redistribution marked `SYNTHETIC_DAMAGE` carry zero. The dispatcher
+checks the current holder's item, HP and Klutz (including live Neutralizing Gas
+suppression). Handlers decide their own activation
+rules: Shell Bell requires positive damage and checks `SHEER_FORCE_BOOSTED`, recorded
+when Sheer Force actually removes a secondary effect.

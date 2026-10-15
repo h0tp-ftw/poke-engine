@@ -274,6 +274,7 @@ def lowkick(attacking_side, attacking_move, defending_move, attacking_pokemon, d
 def painsplit(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
     # damage done to the opponent is handled in the damage calculation module
     attacking_move = attacking_move.copy()
+    attacking_move[constants.SYNTHETIC_DAMAGE] = True
     total_hp = attacking_pokemon.hp + defending_pokemon.hp
     damage_done = attacking_pokemon.hp - total_hp / 2
     damage_fraction = -1*damage_done / attacking_pokemon.maxhp

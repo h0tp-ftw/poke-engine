@@ -7,6 +7,7 @@ from .damage_calculator import type_effectiveness_modifier
 from .special_effects.abilities.on_switch_in import ability_on_switch_in
 from .special_effects.items.on_switch_in import item_on_switch_in
 from .special_effects.items.end_of_turn import item_end_of_turn
+from .special_effects.items.after_move import item_after_move
 from .special_effects.abilities.end_of_turn import ability_end_of_turn
 from .special_effects.moves.after_move import after_move
 from .special_effects.moves import move_special_effect
@@ -424,6 +425,8 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
                         )
                     )
 
+        if not attacking_move.get(constants.SYNTHETIC_DAMAGE):
+            instruction.damage_dealt = max(0, actual_damage)
         instruction.update_percentage(percent_hit)
 
         if damage_side.active.hp <= 0:
@@ -840,7 +843,7 @@ def get_instructions_from_flinching_moves(defender, accuracy, first_move, instru
 
 
 def get_instructions_from_attacker_recovery(mutator, attacker_string, move, instruction):
-    if instruction.frozen:
+    if instruction.frozen and not instruction.damage_dealt:
         return [instruction]
 
     mutator.apply(instruction.instructions)
@@ -878,6 +881,26 @@ def get_instructions_from_attacker_recovery(mutator, attacker_string, move, inst
     if health_recovered:
         instruction.add_instruction(heal_instruction)
 
+    return [instruction]
+
+
+def get_instructions_from_item_after_move(mutator, attacker, move, instruction):
+    if instruction.frozen and not instruction.damage_dealt:
+        return [instruction]
+
+    mutator.apply(instruction.instructions)
+    try:
+        attacking_pokemon = get_side_from_state(mutator.state, attacker).active
+        defender = opposite_side[attacker]
+        defending_pokemon = get_side_from_state(mutator.state, defender).active
+        additions = item_after_move(
+            attacking_pokemon.item, mutator.state, attacker, attacking_pokemon,
+            defender, defending_pokemon, move, instruction.damage_dealt
+        )
+    finally:
+        mutator.reverse(instruction.instructions)
+    for addition in additions:
+        instruction.add_instruction(addition)
     return [instruction]
 
 
