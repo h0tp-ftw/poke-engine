@@ -4,6 +4,12 @@ from . import constants
 import logging
 
 from .damage_calculator import type_effectiveness_modifier
+from .effect_state import (
+    UNSUPPRESSIBLE_ABILITIES,
+    effective_ability,
+    effective_item,
+    healing_allowed,
+)
 from .special_effects.abilities.on_switch_in import ability_on_switch_in
 from .special_effects.items.on_switch_in import item_on_switch_in
 from .special_effects.items.end_of_turn import item_end_of_turn
@@ -77,7 +83,7 @@ def get_instructions_from_move_special_effect(mutator, attacking_side, attacking
     return [instructions]
 
 
-def get_instructions_from_volatile_statuses(mutator, volatile_status, attacker, affected_side, first_move, instruction):
+def get_instructions_from_volatile_statuses(mutator, volatile_status, attacker, affected_side, first_move, instruction, duration=None, bypass_substitute=False):
     if instruction.frozen or not volatile_status:
         return [instruction]
 
@@ -91,18 +97,34 @@ def get_instructions_from_volatile_statuses(mutator, volatile_status, attacker, 
 
     side = get_side_from_state(mutator.state, affected_side)
     mutator.apply(instruction.instructions)
+    opposing_pokemon = get_side_from_state(mutator.state, opposite_side[affected_side]).active
+    if volatile_status == 'gastroacid' and (
+        side.active.ability in UNSUPPRESSIBLE_ABILITIES
+        or effective_item(side.active, opposing_pokemon) == 'abilityshield'
+    ):
+        mutator.reverse(instruction.instructions)
+        return [instruction]
     if volatile_status in side.active.volatile_status:
         mutator.reverse(instruction.instructions)
         return [instruction]
 
-    if can_be_volatile_statused(side, volatile_status, first_move) and volatile_status not in side.active.volatile_status:
+    if can_be_volatile_statused(side, volatile_status, first_move, bypass_substitute) and volatile_status not in side.active.volatile_status:
         apply_status_instruction = (
             constants.MUTATOR_APPLY_VOLATILE_STATUS,
             affected_side,
             volatile_status
         )
+        old_duration = side.active.volatile_status_durations.get(volatile_status, 0)
         mutator.reverse(instruction.instructions)
         instruction.add_instruction(apply_status_instruction)
+        if volatile_status in ('embargo', 'healblock', 'heal_block'):
+            instruction.add_instruction((
+                constants.MUTATOR_SET_VOLATILE_DURATION,
+                affected_side,
+                volatile_status,
+                5 if duration is None else duration,
+                old_duration,
+            ))
         if volatile_status == constants.SUBSTITUTE:
             instruction.add_instruction(
                 (
@@ -124,6 +146,8 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
     attacking_side = get_side_from_state(mutator.state, attacker)
     defending_side = get_side_from_state(mutator.state, opposite_side[attacker])
     mutator.apply(instructions.instructions)
+    # Switch-out abilities resolve before switching removes suppression statuses.
+    outgoing_ability = effective_ability(attacking_side.active, defending_side.active)
     instruction_additions = remove_volatile_status_and_boosts_instructions(attacking_side, attacker)
     mutator.apply(instruction_additions)
 
@@ -133,10 +157,12 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
             attacker,
             move[constants.ID]
         )
+        if move.get('disabled_by'):
+            remove_disabled_instruction += (move['disabled_by'],)
         mutator.apply_one(remove_disabled_instruction)
         instruction_additions.append(remove_disabled_instruction)
 
-    if attacking_side.active.ability == 'regenerator' and attacking_side.active.hp:
+    if outgoing_ability == 'regenerator' and attacking_side.active.hp:
         hp_missing = attacking_side.active.maxhp - attacking_side.active.hp
         regenerator_instruction = (
             constants.MUTATOR_HEAL,
@@ -145,7 +171,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
         )
         mutator.apply_one(regenerator_instruction)
         instruction_additions.append(regenerator_instruction)
-    elif attacking_side.active.ability == 'naturalcure' and attacking_side.active.status is not None:
+    elif outgoing_ability == 'naturalcure' and attacking_side.active.status is not None:
         naturalcure_instruction = (
             constants.MUTATOR_REMOVE_STATUS,
             attacker,
@@ -164,7 +190,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
     instruction_additions.append(switch_instruction)
 
     switch_pkmn = attacking_side.active
-    if switch_pkmn.item != 'heavydutyboots':
+    if effective_item(switch_pkmn, defending_side.active) != 'heavydutyboots':
 
         # account for stealth rock damage
         if attacking_side.side_conditions[constants.STEALTH_ROCK] == 1:
@@ -178,7 +204,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
             instruction_additions.append(stealth_rock_instruction)
 
         # account for spikes damage
-        if attacking_side.side_conditions[constants.SPIKES] > 0 and switch_pkmn.is_grounded():
+        if attacking_side.side_conditions[constants.SPIKES] > 0 and switch_pkmn.is_grounded(defending_side.active):
             spike_count = attacking_side.side_conditions[constants.SPIKES]
             spikes_instruction = (
                 constants.MUTATOR_DAMAGE,
@@ -189,7 +215,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
             instruction_additions.append(spikes_instruction)
 
         # account for stickyweb speed drop
-        if attacking_side.side_conditions[constants.STICKY_WEB] == 1 and switch_pkmn.is_grounded() and switch_pkmn.ability not in constants.IMMUNE_TO_STAT_LOWERING_ABILITIES:
+        if attacking_side.side_conditions[constants.STICKY_WEB] == 1 and switch_pkmn.is_grounded(defending_side.active) and effective_ability(switch_pkmn, defending_side.active) not in constants.IMMUNE_TO_STAT_LOWERING_ABILITIES:
             sticky_web_instruction = (
                 constants.MUTATOR_UNBOOST,
                 attacker,
@@ -200,9 +226,12 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
             instruction_additions.append(sticky_web_instruction)
 
         # account for toxic spikes effect
-        if attacking_side.side_conditions[constants.TOXIC_SPIKES] >= 1 and switch_pkmn.is_grounded():
+        if attacking_side.side_conditions[constants.TOXIC_SPIKES] >= 1 and switch_pkmn.is_grounded(defending_side.active):
             toxic_spike_instruction = None
-            if not immune_to_status(mutator.state, switch_pkmn, switch_pkmn, constants.POISON):
+            if (
+                not any(t in ('poison', 'steel') for t in switch_pkmn.types)
+                and not immune_to_status(mutator.state, switch_pkmn, defending_side.active, constants.POISON)
+            ):
                 if attacking_side.side_conditions[constants.TOXIC_SPIKES] == 1:
                     toxic_spike_instruction = (
                         constants.MUTATOR_APPLY_STATUS,
@@ -228,7 +257,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
 
     # account for switch-in abilities
     ability_switch_in_instructions = ability_on_switch_in(
-        switch_pkmn.ability,
+        effective_ability(switch_pkmn, defending_side.active),
         mutator.state,
         attacker,
         attacking_side.active,
@@ -242,7 +271,7 @@ def get_instructions_from_switch(mutator, attacker, switch_pokemon_name, instruc
 
     # account for switch-in items
     item_switch_in_instructions = item_on_switch_in(
-        switch_pkmn.item,
+        effective_item(switch_pkmn, defending_side.active),
         mutator.state,
         attacker,
         attacking_side.active,
@@ -325,7 +354,7 @@ def get_instructions_from_statuses_that_freeze_the_state(mutator, attacker, defe
             instruction.update_percentage(constants.THAW_PERCENT)
             instructions.append(still_frozen_instruction)
 
-    if constants.POWDER in move[constants.FLAGS] and ('grass' in defender_side.active.types or defender_side.active.ability == 'overcoat'):
+    if constants.POWDER in move[constants.FLAGS] and ('grass' in defender_side.active.types or effective_ability(defender_side.active, attacker_side.active) == 'overcoat'):
         instruction.frozen = True
 
     if move[constants.TYPE] == 'electric' and 'ground' in defender_side.active.types:
@@ -385,7 +414,7 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
     move_missed_instruction = copy(instruction)
     hit_sub = False
     if percent_hit > 0:
-        if constants.SUBSTITUTE in damage_side.active.volatile_status and constants.SOUND not in move_flags and attacker_side.active.ability != 'infiltrator':
+        if constants.SUBSTITUTE in damage_side.active.volatile_status and constants.SOUND not in move_flags and effective_ability(attacker_side.active, damage_side.active) != 'infiltrator':
             hit_sub = True
             if damage >= damage_side.active.maxhp * 0.25:
                 actual_damage = damage_side.active.maxhp * 0.25
@@ -402,7 +431,7 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
             # dont drop hp below 0 (min() statement), and dont overheal (max() statement)
             actual_damage = max(min(damage, damage_side.active.hp), -1*(damage_side.active.maxhp - damage_side.active.hp))
 
-            if damage_side.active.ability == 'sturdy' and damage_side.active.hp == damage_side.active.maxhp:
+            if effective_ability(damage_side.active, attacker_side.active) == 'sturdy' and damage_side.active.hp == damage_side.active.maxhp:
                 actual_damage -= 1
 
             instruction_additions.append(
@@ -413,17 +442,22 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
                 )
             )
 
-            if attacker_side.active.ability == "beastboost" and actual_damage == damage_side.active.hp:
-                highest_stat = attacker_side.active.get_highest_stat()
-                if attacker_side.active.get_boost_from_boost_string(highest_stat) < 6:
-                    instruction_additions.append(
-                        (
-                            constants.MUTATOR_BOOST,
-                            attacker,
-                            highest_stat,
-                            1
+            if actual_damage > 0 and actual_damage == damage_side.active.hp:
+                # Gas ends when its holder faints, before the attacker's KO
+                # ability triggers. Damage is still a pending instruction here.
+                fainted_defender = copy(damage_side.active)
+                fainted_defender.hp = 0
+                if effective_ability(attacker_side.active, fainted_defender) == "beastboost":
+                    highest_stat = attacker_side.active.get_highest_stat()
+                    if attacker_side.active.get_boost_from_boost_string(highest_stat) < 6:
+                        instruction_additions.append(
+                            (
+                                constants.MUTATOR_BOOST,
+                                attacker,
+                                highest_stat,
+                                1
+                            )
                         )
-                    )
 
         if not attacking_move.get(constants.SYNTHETIC_DAMAGE):
             instruction.damage_dealt = max(0, actual_damage)
@@ -432,7 +466,7 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
         if damage_side.active.hp <= 0:
             instruction.frozen = True
 
-        if drain:
+        if drain and healing_allowed(attacker_side.active):
             drain_percent = drain[0] / drain[1]
             drain_instruction = (
                 constants.MUTATOR_HEAL,
@@ -475,7 +509,7 @@ def get_instructions_from_damage(mutator, defender, damage, accuracy, attacking_
             )
             move_missed_instruction.add_instruction(crash_instruction)
 
-        if attacker_side.active.item == 'blunderpolicy':
+        if effective_item(attacker_side.active, damage_side.active) == 'blunderpolicy':
             blunder_policy_increase_speed_instruction = (
                 constants.MUTATOR_BOOST,
                 attacker,
@@ -514,10 +548,19 @@ def get_instructions_from_defenders_ability_after_move(mutator, move, ability_na
     if attacker_string not in opposite_side:
         raise ValueError("attacker parameter must be one of: {}".format(', '.join(opposite_side)))
 
+    mutator.apply(instruction.instructions)
+    try:
+        attacking_pokemon = get_side_from_state(mutator.state, attacker_string).active
+        defending_pokemon = get_side_from_state(mutator.state, opposite_side[attacker_string]).active
+        ability_name = effective_ability(defending_pokemon, attacking_pokemon)
+        contact_protected = effective_item(attacking_pokemon, defending_pokemon) == 'protectivepads'
+    finally:
+        mutator.reverse(instruction.instructions)
+
     if (
         ability_name == "static"
         and constants.CONTACT in move[constants.FLAGS]
-        and attacking_pokemon.item != "protectivepads"
+        and not contact_protected
     ):
         return get_instructions_from_status_effects(
             mutator,
@@ -529,7 +572,7 @@ def get_instructions_from_defenders_ability_after_move(mutator, move, ability_na
     elif (
         ability_name == "flamebody"
         and constants.CONTACT in move[constants.FLAGS]
-        and attacking_pokemon.item != "protectivepads"
+        and not contact_protected
     ):
         return get_instructions_from_status_effects(
             mutator,
@@ -731,7 +774,7 @@ def get_instructions_from_status_effects(mutator, defender, status, accuracy, in
     if percent_hit < 1:
         move_missed_instruction.frozen = True
         move_missed_instruction.update_percentage(1 - percent_hit)
-        if attacking_side.active.item == 'blunderpolicy':
+        if effective_item(attacking_side.active, defending_side.active) == 'blunderpolicy':
             blunder_policy_increase_speed_instruction = (
                 constants.MUTATOR_BOOST,
                 opposite_side[defender],
@@ -766,6 +809,7 @@ def get_instructions_from_boosts(mutator, side_string, boosts, accuracy, instruc
 
     mutator.apply(instruction.instructions)
     side = get_side_from_state(mutator.state, side_string)
+    opposing_pokemon = get_side_from_state(mutator.state, opposite_side[side_string]).active
 
     instruction_additions = []
     move_missed_instruction = copy(instruction)
@@ -784,8 +828,8 @@ def get_instructions_from_boosts(mutator, side_string, boosts, accuracy, instruc
                 )
                 instruction_additions.append(boost_instruction)
             elif (
-                side.active.ability not in constants.IMMUNE_TO_STAT_LOWERING_ABILITIES and
-                side.active.item not in constants.IMMUNE_TO_STAT_LOWERING_ITEMS
+                effective_ability(side.active, opposing_pokemon) not in constants.IMMUNE_TO_STAT_LOWERING_ABILITIES and
+                effective_item(side.active, opposing_pokemon) not in constants.IMMUNE_TO_STAT_LOWERING_ITEMS
             ):
                 new_boost = pkmn_boost + v
                 if new_boost < -1 * constants.MAX_BOOSTS:
@@ -860,7 +904,12 @@ def get_instructions_from_attacker_recovery(mutator, attacker_string, move, inst
     except KeyError:
         health_recovered = 0
 
-    if health_recovered == 0:
+    # Pain Split redistributes HP directly; Heal Block only blocks recovery.
+    if health_recovered == 0 or (
+        health_recovered > 0
+        and move.get(constants.ID) != 'painsplit'
+        and not healing_allowed(pkmn)
+    ):
         mutator.reverse(instruction.instructions)
         return [instruction]
 
@@ -894,7 +943,7 @@ def get_instructions_from_item_after_move(mutator, attacker, move, instruction):
         defender = opposite_side[attacker]
         defending_pokemon = get_side_from_state(mutator.state, defender).active
         additions = item_after_move(
-            attacking_pokemon.item, mutator.state, attacker, attacking_pokemon,
+            effective_item(attacking_pokemon, defending_pokemon), mutator.state, attacker, attacking_pokemon,
             defender, defending_pokemon, move, instruction.damage_dealt
         )
     finally:
@@ -917,8 +966,9 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
         pkmn = side.active
+        opposing_pokemon = get_side_from_state(mutator.state, opposite_side[attacker]).active
 
-        if pkmn.ability == 'magicguard' or not pkmn.hp:
+        if effective_ability(pkmn, opposing_pokemon) == 'magicguard' or not pkmn.hp:
             continue
 
         if mutator.state.weather == constants.SAND and not any(t in pkmn.types for t in ['steel', 'rock', 'ground']):
@@ -930,7 +980,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             mutator.apply_one(sand_damage_instruction)
             instruction.add_instruction(sand_damage_instruction)
 
-        elif mutator.state.weather == constants.HAIL and 'ice' not in pkmn.types and pkmn.ability != 'icebody':
+        elif mutator.state.weather == constants.HAIL and 'ice' not in pkmn.types and effective_ability(pkmn, opposing_pokemon) != 'icebody':
             ice_damage_instruction = (
                 constants.MUTATOR_DAMAGE,
                 attacker,
@@ -968,7 +1018,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     # wish
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
-        if side.wish[0] == 1 and 0 < side.active.hp < side.active.maxhp:
+        if side.wish[0] == 1 and 0 < side.active.hp < side.active.maxhp and healing_allowed(side.active):
             wish_heal_instruction = (
                 constants.MUTATOR_HEAL,
                 attacker,
@@ -992,12 +1042,15 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
         pkmn = side.active
         defending_pkmn = defending_side.active
 
-        item_instruction = item_end_of_turn(side.active.item, mutator.state, attacker, pkmn, defender, defending_pkmn)
+        active_item = effective_item(pkmn, defending_pkmn)
+        item_instruction = None
+        if active_item not in ('flameorb', 'toxicorb'):
+            item_instruction = item_end_of_turn(active_item, mutator.state, attacker, pkmn, defender, defending_pkmn)
         if item_instruction is not None:
             mutator.apply_one(item_instruction)
             instruction.add_instruction(item_instruction)
 
-        ability_instruction = ability_end_of_turn(side.active.ability, mutator.state, attacker, pkmn, defender, defending_pkmn)
+        ability_instruction = ability_end_of_turn(effective_ability(pkmn, defending_pkmn), mutator.state, attacker, pkmn, defender, defending_pkmn)
         if ability_instruction is not None:
             mutator.apply_one(ability_instruction)
             instruction.add_instruction(ability_instruction)
@@ -1006,11 +1059,12 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
         pkmn = side.active
+        opposing_pokemon = get_side_from_state(mutator.state, opposite_side[attacker]).active
 
-        if pkmn.ability == 'magicguard' or not pkmn.hp:
+        if effective_ability(pkmn, opposing_pokemon) == 'magicguard' or not pkmn.hp:
             continue
 
-        if constants.TOXIC == pkmn.status and pkmn.ability != 'poisonheal':
+        if constants.TOXIC == pkmn.status and effective_ability(pkmn, opposing_pokemon) != 'poisonheal':
             toxic_count = side.side_conditions[constants.TOXIC_COUNT]
             toxic_multiplier = (1 / 16) * toxic_count + (1 / 16)
             toxic_damage = max(0, int(min(pkmn.maxhp * toxic_multiplier, pkmn.hp)))
@@ -1041,7 +1095,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             mutator.apply_one(burn_damage_instruction)
             instruction.add_instruction(burn_damage_instruction)
 
-        elif constants.POISON == pkmn.status and pkmn.ability != 'poisonheal':
+        elif constants.POISON == pkmn.status and effective_ability(pkmn, opposing_pokemon) != 'poisonheal':
             poison_damage_instruction = (
                 constants.MUTATOR_DAMAGE,
                 attacker,
@@ -1058,7 +1112,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
         pkmn = side.active
         defending_pkmn = defending_side.active
 
-        if pkmn.ability == 'magicguard' or not pkmn.hp or not defending_pkmn.hp:
+        if effective_ability(pkmn, defending_pkmn) == 'magicguard' or not pkmn.hp or not defending_pkmn.hp:
             continue
 
         if constants.LEECH_SEED in pkmn.volatile_status:
@@ -1079,9 +1133,10 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             )
 
             mutator.apply_one(sap_instruction)
-            mutator.apply_one(heal_instruction)
             instruction.add_instruction(sap_instruction)
-            instruction.add_instruction(heal_instruction)
+            if healing_allowed(defending_pkmn):
+                mutator.apply_one(heal_instruction)
+                instruction.add_instruction(heal_instruction)
 
     # volatile-statuses
     for attacker in sides:
@@ -1161,6 +1216,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
         pkmn = side.active
+        opposing_pokemon = get_side_from_state(mutator.state, opposite_side[attacker]).active
 
         if attacker == constants.USER:
             move = bot_move
@@ -1178,20 +1234,87 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             constants.SWITCH_STRING not in move and
             constants.DRAG not in other_move.get(constants.FLAGS, {}) and
             move[constants.ID] not in constants.SWITCH_OUT_MOVES and
-            (pkmn.item in constants.CHOICE_ITEMS or locking_move or pkmn.ability == 'gorillatactics')
+            (effective_item(pkmn, opposing_pokemon) in constants.CHOICE_ITEMS or locking_move or effective_ability(pkmn, opposing_pokemon) == 'gorillatactics')
         ):
             move_used = move[constants.ID]
+            if locking_move:
+                disabled_by = 'lockedmove'
+            elif effective_item(pkmn, opposing_pokemon) in constants.CHOICE_ITEMS:
+                disabled_by = 'choice'
+            else:
+                disabled_by = 'gorillatactics'
             for m in filter(
-                lambda x: x[constants.ID] != move_used and not x.get(constants.DISABLED, False),
+                lambda x: (
+                    x[constants.ID] != move_used
+                    and x.get(constants.CURRENT_PP, 1) > 0
+                    and (
+                        not x.get(constants.DISABLED, False)
+                        or x.get('disabled_by') in ('healblock', 'assaultvest')
+                        or not pkmn.move_is_disabled(x, opposing_pokemon)
+                    )
+                ),
                 pkmn.moves
             ):
+                # Heal Block and Assault Vest remain independently enforced by
+                # move_is_disabled; a new choice lock must survive their end.
+                # Preserve the old source so reversing this branch restores
+                # the original metadata as well as the disabled bit.
+                if m.get(constants.DISABLED, False):
+                    enable_instruction = (
+                        constants.MUTATOR_ENABLE_MOVE,
+                        attacker,
+                        m[constants.ID],
+                        m.get('disabled_by'),
+                    )
+                    mutator.apply_one(enable_instruction)
+                    instruction.add_instruction(enable_instruction)
                 disable_instruction = (
                     constants.MUTATOR_DISABLE_MOVE,
                     attacker,
-                    m[constants.ID]
+                    m[constants.ID],
+                    disabled_by,
                 )
                 mutator.apply_one(disable_instruction)
                 instruction.add_instruction(disable_instruction)
+
+    # Suppression expires after recovery and damage residuals, before late
+    # status orbs. An orb can activate on the same turn Embargo ends.
+    for side_string in sides:
+        pkmn = get_side_from_state(mutator.state, side_string).active
+        timed_statuses = set(pkmn.volatile_status_durations) | (
+            pkmn.volatile_status & {'embargo', 'healblock', 'heal_block'}
+        )
+        for status in sorted(timed_statuses):
+            if status not in pkmn.volatile_status:
+                continue
+            old_duration = pkmn.volatile_status_durations.get(status, 0)
+            # Older saved states contain only the flag. Give those statuses a
+            # full initial lifetime instead of keeping suppression forever.
+            duration = old_duration or 5
+            timer_instruction = (
+                constants.MUTATOR_SET_VOLATILE_DURATION,
+                side_string,
+                status,
+                duration - 1,
+                old_duration,
+            )
+            mutator.apply_one(timer_instruction)
+            instruction.add_instruction(timer_instruction)
+            if duration == 1:
+                end_instruction = (constants.MUTATOR_REMOVE_VOLATILE_STATUS, side_string, status)
+                mutator.apply_one(end_instruction)
+                instruction.add_instruction(end_instruction)
+
+    for attacker in sides:
+        defender = opposite_side[attacker]
+        pkmn = get_side_from_state(mutator.state, attacker).active
+        defending_pkmn = get_side_from_state(mutator.state, defender).active
+        active_item = effective_item(pkmn, defending_pkmn)
+        if active_item in ('flameorb', 'toxicorb'):
+            orb_instruction = item_end_of_turn(active_item, mutator.state, attacker, pkmn, defender, defending_pkmn)
+            if orb_instruction is not None:
+                mutator.apply_one(orb_instruction)
+                instruction.add_instruction(orb_instruction)
 
     mutator.reverse(instruction.instructions)
 
@@ -1260,6 +1383,15 @@ def remove_volatile_status_and_boosts_instructions(side, side_string):
                 v_status
             )
         )
+        duration = side.active.volatile_status_durations.get(v_status, 0)
+        if duration:
+            instruction_additions.append((
+                constants.MUTATOR_SET_VOLATILE_DURATION,
+                side_string,
+                v_status,
+                0,
+                duration,
+            ))
     if side.side_conditions[constants.TOXIC_COUNT]:
         instruction_additions.append(
             (
@@ -1321,7 +1453,7 @@ def get_side_from_state(state, side_string):
         raise ValueError("Invalid value for `side`")
 
 
-def can_be_volatile_statused(side, volatile_status, first_move):
+def can_be_volatile_statused(side, volatile_status, first_move, bypass_substitute=False):
     if volatile_status in constants.PROTECT_VOLATILE_STATUSES:
         if side.side_conditions[constants.PROTECT]:
             return False
@@ -1329,7 +1461,7 @@ def can_be_volatile_statused(side, volatile_status, first_move):
             return True
         else:
             return False
-    if constants.SUBSTITUTE in side.active.volatile_status:
+    if constants.SUBSTITUTE in side.active.volatile_status and not bypass_substitute:
         return False
     if volatile_status == constants.SUBSTITUTE and side.active.hp < side.active.maxhp * 0.25:
         return False
@@ -1349,60 +1481,60 @@ def immune_to_status(state, defending_pkmn, attacking_pkmn, status):
     # General status immunity
     if defending_pkmn.status is not None or defending_pkmn.hp <= 0:
         return True
-    if constants.SUBSTITUTE in defending_pkmn.volatile_status and attacking_pkmn.ability != 'infiltrator':
+    if constants.SUBSTITUTE in defending_pkmn.volatile_status and effective_ability(attacking_pkmn, defending_pkmn) != 'infiltrator':
         return True
-    if defending_pkmn.ability == 'shieldsdown' and ((defending_pkmn.hp / defending_pkmn.maxhp) > 0.5):
+    if effective_ability(defending_pkmn, attacking_pkmn) == 'shieldsdown' and ((defending_pkmn.hp / defending_pkmn.maxhp) > 0.5):
         return True
-    if defending_pkmn.ability == 'comatose':
+    if effective_ability(defending_pkmn, attacking_pkmn) == 'comatose':
         return True
-    if state.field == constants.MISTY_TERRAIN and defending_pkmn.is_grounded():
+    if state.field == constants.MISTY_TERRAIN and defending_pkmn.is_grounded(attacking_pkmn):
         return True
-    if defending_pkmn.ability == "purifyingsalt":
+    if effective_ability(defending_pkmn, attacking_pkmn) == "purifyingsalt":
         return True
-    if defending_pkmn.ability == "thermalexchange" and status == constants.BURN:
+    if effective_ability(defending_pkmn, attacking_pkmn) == "thermalexchange" and status == constants.BURN:
         return True
 
     # Specific status immunity
     return (
-        status == constants.FROZEN and is_immune_to_freeze(state, defending_pkmn) or
-        status == constants.BURN and is_immune_to_burn(defending_pkmn) or
-        status == constants.SLEEP and is_immune_to_sleep(state, defending_pkmn) or
-        status == constants.PARALYZED and is_immune_to_paralysis(defending_pkmn) or
+        status == constants.FROZEN and is_immune_to_freeze(state, defending_pkmn, attacking_pkmn) or
+        status == constants.BURN and is_immune_to_burn(defending_pkmn, attacking_pkmn) or
+        status == constants.SLEEP and is_immune_to_sleep(state, defending_pkmn, attacking_pkmn) or
+        status == constants.PARALYZED and is_immune_to_paralysis(defending_pkmn, attacking_pkmn) or
         status in [constants.POISON, constants.TOXIC] and is_immune_to_poison(attacking_pkmn, defending_pkmn)
     )
 
 
-def is_immune_to_freeze(state, pkmn):
+def is_immune_to_freeze(state, pkmn, opponent=None):
     return (
         'ice' in pkmn.types or
-        pkmn.ability in constants.IMMUNE_TO_FROZEN_ABILITIES or
+        effective_ability(pkmn, opponent) in constants.IMMUNE_TO_FROZEN_ABILITIES or
         state.weather == constants.DESOLATE_LAND
     )
 
 
-def is_immune_to_burn(pkmn):
+def is_immune_to_burn(pkmn, opponent=None):
     return (
         'fire' in pkmn.types or
-        pkmn.ability in constants.IMMUNE_TO_BURN_ABILITIES
+        effective_ability(pkmn, opponent) in constants.IMMUNE_TO_BURN_ABILITIES
     )
 
 
-def is_immune_to_sleep(state, pkmn):
+def is_immune_to_sleep(state, pkmn, opponent=None):
     return (
-        pkmn.ability in constants.IMMUNE_TO_SLEEP_ABILITIES or
-        state.field == constants.ELECTRIC_TERRAIN and pkmn.is_grounded()
+        effective_ability(pkmn, opponent) in constants.IMMUNE_TO_SLEEP_ABILITIES or
+        state.field == constants.ELECTRIC_TERRAIN and pkmn.is_grounded(opponent)
     )
 
 
 def is_immune_to_poison(attacking, defending):
     return (
-        any(t in ['poison', 'steel'] for t in defending.types) and not attacking.ability == 'corrosion'  or
-        defending.ability in constants.IMMUNE_TO_POISON_ABILITIES
+        any(t in ['poison', 'steel'] for t in defending.types) and effective_ability(attacking, defending) != 'corrosion'  or
+        effective_ability(defending, attacking) in constants.IMMUNE_TO_POISON_ABILITIES
     )
 
 
-def is_immune_to_paralysis(pkmn):
+def is_immune_to_paralysis(pkmn, opponent=None):
     return (
         'electric' in pkmn.types or
-        pkmn.ability in constants.IMMUNE_TO_PARALYSIS_ABILITIES
+        effective_ability(pkmn, opponent) in constants.IMMUNE_TO_PARALYSIS_ABILITIES
     )

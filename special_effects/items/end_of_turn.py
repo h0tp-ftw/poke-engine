@@ -1,8 +1,9 @@
 from ... import constants
+from ...effect_state import healing_allowed, item_is_suppressed
 
 
 def leftovers(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
-    if attacking_pokemon.hp < attacking_pokemon.maxhp:
+    if attacking_pokemon.hp < attacking_pokemon.maxhp and healing_allowed(attacking_pokemon):
         return (
             constants.MUTATOR_HEAL,
             attacking_side,
@@ -41,7 +42,7 @@ def toxicorb(state, attacking_side, attacking_pokemon, defending_side, defending
 
 
 def item_end_of_turn(item_name, state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
-    if attacking_pokemon.hp:
+    if attacking_pokemon.hp and not item_is_suppressed(attacking_pokemon, defending_pokemon):
         try:
             return globals()[item_name](state, attacking_side, attacking_pokemon, defending_side, defending_pokemon)
         except KeyError:

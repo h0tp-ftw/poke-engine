@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import ability_is_suppressed, effective_ability
 
 from ...damage_calculator import is_not_very_effective
 from ...damage_calculator import is_super_effective
@@ -313,7 +314,7 @@ def sandforce(attacking_move, defending_move, attacking_pokemon, defending_pokem
 
 
 def darkaura(attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather):
-    if attacking_move[constants.TYPE] == 'dark' and defending_pokemon.ability != 'aurabreak':
+    if attacking_move[constants.TYPE] == 'dark' and effective_ability(defending_pokemon, attacking_pokemon) != 'aurabreak':
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 1.33
 
@@ -321,7 +322,7 @@ def darkaura(attacking_move, defending_move, attacking_pokemon, defending_pokemo
 
 
 def fairyaura(attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather):
-    if attacking_move[constants.TYPE] == 'fairy' and defending_pokemon.ability != 'aurabreak':
+    if attacking_move[constants.TYPE] == 'fairy' and effective_ability(defending_pokemon, attacking_pokemon) != 'aurabreak':
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 1.33
     return attacking_move
@@ -445,7 +446,7 @@ ability_lookup = {
 
 
 def ability_modify_attack_being_used(ability_name, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather):
-    if attacking_pokemon.ability == 'neutralizinggas' or defending_pokemon.ability == 'neutralizinggas':
+    if ability_is_suppressed(attacking_pokemon, defending_pokemon):
         return attacking_move
     ability_func = ability_lookup.get(ability_name)
     if ability_func is not None:

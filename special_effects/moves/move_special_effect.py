@@ -17,7 +17,7 @@ def futuresight(mutator, attacking_side_string, attacking_side, attacking_pokemo
 def trick(mutator, attacking_side_string, attacking_side, attacking_pokemon, defending_pokemon):
     instructions = []
     if (
-            (defending_pokemon.item_can_be_removed() or defending_pokemon.item is None) and
+            (defending_pokemon.item_can_be_removed(attacking_pokemon) or defending_pokemon.item is None) and
             not (defending_pokemon.item is None and attacking_pokemon.item is None)
     ):
         instructions.append(

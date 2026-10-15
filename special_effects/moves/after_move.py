@@ -2,7 +2,7 @@ from ... import constants
 
 
 def knockoff(state, attacker, defender, attacking_side, defending_side, move_hit, hit_sub):
-    if move_hit and defending_side.active.item_can_be_removed():
+    if move_hit and defending_side.active.item_can_be_removed(attacking_side.active):
         return [
             (constants.MUTATOR_CHANGE_ITEM, defender, None, defending_side.active.item)
         ]

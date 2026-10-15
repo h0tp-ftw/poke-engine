@@ -2,6 +2,7 @@ from copy import copy
 from copy import deepcopy
 
 from . import constants
+from .effect_state import ability_is_suppressed, effective_ability, effective_item
 from .data import all_move_json
 from .data import pokedex
 
@@ -102,15 +103,19 @@ def _calculate_damage(attacker, defender, move, conditions=None, calc_type='aver
     if conditions is None:
         conditions = {}
 
+    attacker_ability = effective_ability(attacker, defender)
+    defender_ability = effective_ability(defender, attacker)
     attacking_stats = attacker.calculate_boosted_stats()
     defending_stats = defender.calculate_boosted_stats()
 
-    if attacker.ability == 'unaware':
+    if attacker_ability == 'unaware':
         if defense == constants.DEFENSE:
             defending_stats[defense] = defender.defense
         elif defense == constants.SPECIAL_DEFENSE:
             defending_stats[defense] = defender.special_defense
-    if defender.ability == 'unaware':
+    if (defender_ability == 'unaware' and
+            (attacker_ability not in constants.ABILITIES_THAT_IGNORE_OTHER_ABILITIES or
+             effective_item(defender, attacker) == 'abilityshield')):
         if attack == constants.ATTACK:
             attacking_stats[attack] = attacker.attack
         elif defense == constants.SPECIAL_ATTACK:
@@ -137,13 +142,13 @@ def _calculate_damage(attacker, defender, move, conditions=None, calc_type='aver
     except KeyError:
         pass
 
-    if defender.ability == "tabletsofruin":
+    if defender_ability == "tabletsofruin":
         attacking_stats[constants.ATTACK] *= 0.75
-    elif defender.ability == "vesselofruin":
+    elif defender_ability == "vesselofruin":
         attacking_stats[constants.SPECIAL_ATTACK] *= 0.75
-    if attacker.ability == "swordofruin":
+    if attacker_ability == "swordofruin":
         defending_stats[constants.DEFENSE] *= 0.75
-    elif attacker.ability == "beadsofruin":
+    elif attacker_ability == "beadsofruin":
         defending_stats[constants.SPECIAL_DEFENSE] *= 0.75
 
     damage = int(int((2 * attacker.level) / 5) + 2) * attacking_move[constants.BASE_POWER]
@@ -176,7 +181,7 @@ def calculate_modifier(attacker, defender, defending_types, attacking_move, cond
     modifier *= terrain_modifier(attacker, defender, attacking_move, conditions.get(constants.TERRAIN))
     modifier *= volatile_status_modifier(attacking_move, attacker, defender)
 
-    if attacker.ability != 'infiltrator':
+    if effective_ability(attacker, defender) != 'infiltrator':
         modifier *= light_screen_modifier(attacking_move, conditions.get(constants.LIGHT_SCREEN))
         modifier *= reflect_modifier(attacking_move, conditions.get(constants.REFLECT))
         modifier *= aurora_veil_modifier(conditions.get(constants.AURORA_VEIL))
@@ -310,26 +315,31 @@ def aurora_veil_modifier(aurora_veil):
 
 
 def terrain_modifier(attacker, defender, attacking_move, terrain):
-    if terrain == constants.ELECTRIC_TERRAIN and attacking_move[constants.TYPE] == 'electric' and attacker.is_grounded():
+    if terrain == constants.ELECTRIC_TERRAIN and attacking_move[constants.TYPE] == 'electric' and attacker.is_grounded(defender):
         return TERRAIN_DAMAGE_BOOST
-    elif terrain == constants.GRASSY_TERRAIN and attacking_move[constants.TYPE] == 'grass' and attacker.is_grounded():
+    elif terrain == constants.GRASSY_TERRAIN and attacking_move[constants.TYPE] == 'grass' and attacker.is_grounded(defender):
         return TERRAIN_DAMAGE_BOOST
     elif terrain == constants.GRASSY_TERRAIN and attacking_move[constants.ID] == 'earthquake':
         return 0.5
-    elif terrain == constants.MISTY_TERRAIN and attacking_move[constants.TYPE] == 'dragon' and defender.is_grounded():
+    elif terrain == constants.MISTY_TERRAIN and attacking_move[constants.TYPE] == 'dragon' and defender.is_grounded(attacker):
         return 0.5
-    elif terrain == constants.PSYCHIC_TERRAIN and attacking_move[constants.TYPE] == 'psychic' and attacker.is_grounded():
+    elif terrain == constants.PSYCHIC_TERRAIN and attacking_move[constants.TYPE] == 'psychic' and attacker.is_grounded(defender):
         return TERRAIN_DAMAGE_BOOST
-    elif terrain == constants.PSYCHIC_TERRAIN and attacking_move[constants.PRIORITY] > 0 and defender.is_grounded():
+    elif terrain == constants.PSYCHIC_TERRAIN and attacking_move[constants.PRIORITY] > 0 and defender.is_grounded(attacker):
         return 0
     return 1
 
 
 def volatile_status_modifier(attacking_move, attacker, defender):
     modifier = 1
+    attacker_ability = effective_ability(attacker, defender)
+    defender_ability = effective_ability(defender, attacker)
+    attacker_suppressed = ability_is_suppressed(attacker, defender)
+    defender_suppressed = ability_is_suppressed(defender, attacker)
     if 'magnetrise' in defender.volatile_status and attacking_move[constants.TYPE] == 'ground' and attacking_move[constants.ID] != 'thousandarrows':
         modifier *= 0
-    if 'flashfire' in attacker.volatile_status and attacking_move[constants.TYPE] == 'fire':
+    if ('flashfire' in attacker.volatile_status and attacking_move[constants.TYPE] == 'fire' and
+            not attacker_suppressed):
         modifier *= 1.5
     if 'tarshot' in defender.volatile_status and attacking_move[constants.TYPE] == 'fire':
         modifier *= 2
@@ -339,8 +349,8 @@ def volatile_status_modifier(attacking_move, attacker, defender):
         modifier *= 0
     if (
         'dive' in defender.volatile_status and
-        attacker.ability != "noguard" and
-        defender.ability != "noguard" and
+        attacker_ability != "noguard" and
+        defender_ability != "noguard" and
         attacking_move[constants.ID] not in [
             "surf", "whirlpool"
         ]
@@ -348,8 +358,8 @@ def volatile_status_modifier(attacking_move, attacker, defender):
         modifier *= 0
     if (
         'dig' in defender.volatile_status and
-        attacker.ability != "noguard" and
-        defender.ability != "noguard" and
+        attacker_ability != "noguard" and
+        defender_ability != "noguard" and
         attacking_move[constants.ID] not in [
             "earthquake", "magnitude", "fissure"
         ]
@@ -360,8 +370,8 @@ def volatile_status_modifier(attacking_move, attacker, defender):
             "fly" in defender.volatile_status or
             "bounce" in defender.volatile_status
         ) and
-        attacker.ability != "noguard" and
-        defender.ability != "noguard" and
+        attacker_ability != "noguard" and
+        defender_ability != "noguard" and
         attacking_move[constants.ID] not in [
             "gust", "thunder", "twister", "skyuppercut", "hurricane", "thousandarrows", "smackdown"
         ]
@@ -369,13 +379,13 @@ def volatile_status_modifier(attacking_move, attacker, defender):
         modifier *= 0
     if 'glaiverush' in defender.volatile_status:
         modifier *= 2
-    if any(vs in attacker.volatile_status for vs in ['quarkdriveatk', "protosynthesisatk"]) and attacking_move[constants.CATEGORY] == constants.PHYSICAL:
+    if not attacker_suppressed and any(vs in attacker.volatile_status for vs in ['quarkdriveatk', "protosynthesisatk"]) and attacking_move[constants.CATEGORY] == constants.PHYSICAL:
         modifier *= 1.3
-    if any(vs in attacker.volatile_status for vs in ['quarkdrivespa', "protosynthesisspa"]) and attacking_move[constants.CATEGORY] == constants.SPECIAL:
+    if not attacker_suppressed and any(vs in attacker.volatile_status for vs in ['quarkdrivespa', "protosynthesisspa"]) and attacking_move[constants.CATEGORY] == constants.SPECIAL:
         modifier *= 1.3
-    if any(vs in defender.volatile_status for vs in ['quarkdrivedef', "protosynthesisdef"]) and attacking_move[constants.CATEGORY] == constants.PHYSICAL:
+    if not defender_suppressed and any(vs in defender.volatile_status for vs in ['quarkdrivedef', "protosynthesisdef"]) and attacking_move[constants.CATEGORY] == constants.PHYSICAL:
         modifier *= (1/1.3)
-    if any(vs in defender.volatile_status for vs in ['quarkdrivespd', "protosynthesisspd"]) and attacking_move[constants.CATEGORY] == constants.SPECIAL:
+    if not defender_suppressed and any(vs in defender.volatile_status for vs in ['quarkdrivespd', "protosynthesisspd"]) and attacking_move[constants.CATEGORY] == constants.SPECIAL:
         modifier *= (1/1.3)
     return modifier
 

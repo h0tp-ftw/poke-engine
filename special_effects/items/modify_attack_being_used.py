@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import item_is_suppressed
 
 from ...damage_calculator import is_super_effective
 
@@ -224,6 +225,8 @@ def lightball(attacking_move, attacking_pokemon, defending_pokemon):
 
 
 def item_modify_attack_being_used(item_name, attacking_move, attacking_pokemon, defending_pokemon):
+    if item_is_suppressed(attacking_pokemon, defending_pokemon):
+        return attacking_move
     try:
         return globals()[item_name](attacking_move, attacking_pokemon, defending_pokemon)
     except KeyError:

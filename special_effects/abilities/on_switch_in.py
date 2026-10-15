@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import ability_is_suppressed, effective_ability, effective_item
 
 
 def sandstream(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
@@ -94,13 +95,14 @@ def mistysurge(state, attacking_side, attacking_pokemon, defending_side, defendi
 
 
 def intimidate(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
-    if defending_pokemon.ability in ['fullmetalbody', 'clearbody', 'hypercutter', 'whitesmoke', 'innerfocus', 'oblivious', 'owntempo', 'scrappy']:
+    defender_ability = effective_ability(defending_pokemon, attacking_pokemon)
+    if defender_ability in ['fullmetalbody', 'clearbody', 'hypercutter', 'whitesmoke', 'innerfocus', 'oblivious', 'owntempo', 'scrappy']:
         return None
-    if defending_pokemon.item in constants.IMMUNE_TO_STAT_LOWERING_ITEMS:
+    if effective_item(defending_pokemon, attacking_pokemon) in constants.IMMUNE_TO_STAT_LOWERING_ITEMS:
         return None
 
     # I shouldn't be doing this here but w/e sue me
-    if defending_pokemon.ability == 'defiant' or defending_pokemon.ability == "guarddog":
+    if defender_ability in ['defiant', 'guarddog']:
         return [(
             constants.MUTATOR_BOOST,
             defending_side,
@@ -109,7 +111,7 @@ def intimidate(state, attacking_side, attacking_pokemon, defending_side, defendi
         )]
 
     # same as above, shouldn't be done here
-    if defending_pokemon.ability == 'rattled':
+    if defender_ability == 'rattled':
         return [(
             constants.MUTATOR_UNBOOST,
             defending_side,
@@ -122,7 +124,7 @@ def intimidate(state, attacking_side, attacking_pokemon, defending_side, defendi
             min(6-defending_pokemon.speed_boost, 1) #stop boosting when it reaches 6
         )]
 
-    if defending_pokemon.ability == 'competitive':
+    if defender_ability == 'competitive':
         return [(
             constants.MUTATOR_UNBOOST,
             defending_side,
@@ -197,7 +199,7 @@ ability_lookup = {
 
 
 def ability_on_switch_in(ability_name, state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
-    if attacking_pokemon.ability == 'neutralizinggas' or defending_pokemon.ability == 'neutralizinggas':
+    if ability_is_suppressed(attacking_pokemon, defending_pokemon):
         return None
     ability_func = ability_lookup.get(ability_name)
     if ability_func is not None:

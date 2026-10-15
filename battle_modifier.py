@@ -16,6 +16,7 @@ from .helpers import calculate_stats
 from .find_state_instructions import get_effective_speed
 from .damage_calculator import calculate_damage
 from .objects import boost_multiplier_lookup
+from .effect_state import effective_ability
 
 
 logger = logging.getLogger(__name__)
@@ -141,12 +142,15 @@ def inactiveoff(battle, _):
 def switch_or_drag(battle, split_msg):
     if is_opponent(battle, split_msg):
         side = battle.opponent
+        opposing_active = battle.user.active
         logger.debug("Opponent has switched - clearing the last used move")
     else:
         side = battle.user
+        opposing_active = battle.opponent.active
         side.side_conditions[constants.TOXIC_COUNT] = 0
 
     if side.active is not None:
+        outgoing_ability = effective_ability(side.active, opposing_active)
         # set the pkmn's types back to their original value if the types were changed
         # if the pkmn is terastallized, this does not happen
         if constants.TYPECHANGE in side.active.volatile_statuses and not side.active.terastallized:
@@ -167,12 +171,15 @@ def switch_or_drag(battle, split_msg):
 
         # reset the volatile statuses of the pokemon being replaced
         side.active.volatile_statuses.clear()
+        side.active.volatile_status_durations.clear()
 
         # reset toxic count for this side
         side.side_conditions[constants.TOXIC_COUNT] = 0
 
         # if the side is alive and has regenerator, give it back 1/3 of it's maxhp
-        if side.active.hp > 0 and not side.active.fainted and side.active.ability == "regenerator":
+        # Regenerator bypasses Heal Block, but cannot trigger while its ability
+        # is suppressed. Resolve that before the switch clears Gastro Acid.
+        if side.active.hp > 0 and not side.active.fainted and outgoing_ability == "regenerator":
             health_healed = int(side.active.max_hp / 3)
             side.active.hp = min(side.active.hp + health_healed, side.active.max_hp)
             logger.debug(
@@ -464,6 +471,11 @@ def start_volatile_status(battle, split_msg):
     if volatile_status not in pkmn.volatile_statuses:
         logger.debug("Starting the volatile status {} on {}".format(volatile_status, pkmn.name))
         pkmn.volatile_statuses.append(volatile_status)
+        if volatile_status in ('embargo', 'healblock', 'heal_block'):
+            other_side = battle.user if side is battle.opponent else battle.opponent
+            duration = 2 if (volatile_status in ('healblock', 'heal_block')
+                             and other_side.last_used_move.move == 'psychicnoise') else 5
+            pkmn.volatile_status_durations[volatile_status] = duration
 
     if volatile_status == constants.DYNAMAX:
         pkmn.hp *= 2
@@ -494,6 +506,7 @@ def end_volatile_status(battle, split_msg):
         pkmn = battle.user.active
 
     volatile_status = normalize_name(split_msg[3].split(":")[-1])
+    pkmn.volatile_status_durations.pop(volatile_status, None)
     if volatile_status not in pkmn.volatile_statuses:
         logger.warning("Pokemon '{}' does not have the volatile status '{}'".format(pkmn.to_dict(), volatile_status))
     else:
@@ -739,6 +752,17 @@ def singleturn(battle, split_msg):
 
 
 def upkeep(battle, _):
+    for side in (battle.user, battle.opponent):
+        if side.active is None:
+            continue
+        pkmn = side.active
+        for status, duration in list(pkmn.volatile_status_durations.items()):
+            if duration <= 1 or status not in pkmn.volatile_statuses:
+                pkmn.volatile_status_durations.pop(status)
+                if status in pkmn.volatile_statuses:
+                    pkmn.volatile_statuses.remove(status)
+            else:
+                pkmn.volatile_status_durations[status] = duration - 1
     if battle.user.side_conditions[constants.PROTECT] > 0:
         battle.user.side_conditions[constants.PROTECT] -= 1
         logger.debug("Setting protect to {} for the bot".format(battle.user.side_conditions[constants.PROTECT]))
