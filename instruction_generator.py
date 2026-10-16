@@ -60,7 +60,63 @@ accuracy_multiplier_lookup = {
 }
 
 
+def resolve_gorilla_tactics_transitions(mutator, instruction, start):
+    """Insert reversible lock resets after newly generated ability transitions.
 
+    Gas ending restarts Gorilla Tactics, whereas Gastro Acid ends it directly.
+    Replay only the new suffix so a later move never inserts duplicate resets
+    into a prefix that has already resolved these transitions.
+    """
+    if not any(
+        pokemon.ability == 'gorillatactics'
+        for side in (mutator.state.user, mutator.state.opponent)
+        for pokemon in (side.active, *side.reserve.values())
+    ):
+        return instruction
+    resolved = instruction.instructions[:start]
+    mutator.apply(resolved)
+    try:
+        for addition in instruction.instructions[start:]:
+            holders = []
+            for side_string, other_string in opposite_side.items():
+                pokemon = get_side_from_state(mutator.state, side_string).active
+                opponent = get_side_from_state(mutator.state, other_string).active
+                if pokemon.ability == 'gorillatactics':
+                    gas_source = opponent if (
+                        effective_ability(pokemon, opponent) != 'gorillatactics'
+                        and effective_ability(opponent, pokemon) == 'neutralizinggas'
+                        and opponent.hp > 0
+                    ) else None
+                    holders.append((side_string, pokemon, gas_source))
+            mutator.apply_one(addition)
+            resolved.append(addition)
+            for side_string, pokemon, gas_source in holders:
+                if get_side_from_state(mutator.state, side_string).active is not pokemon:
+                    continue
+                opponent = get_side_from_state(mutator.state, opposite_side[side_string]).active
+                # Gaining Ability Shield only resumes the existing lock. Gas
+                # itself must end for the ability's Start event to reset it.
+                gas_ended = gas_source is not None and (
+                    opponent is not gas_source or gas_source.hp <= 0
+                    or effective_ability(gas_source, pokemon) != 'neutralizinggas'
+                )
+                restarted = gas_ended and effective_ability(pokemon, opponent) == 'gorillatactics'
+                ended = addition == (constants.MUTATOR_APPLY_VOLATILE_STATUS, side_string, 'gastroacid')
+                if not (restarted or ended):
+                    continue
+                for move in pokemon.moves:
+                    if (
+                        move.get(constants.DISABLED)
+                        and move.get('disabled_by') == 'gorillatactics'
+                        and move.get(constants.CURRENT_PP, 1) > 0
+                    ):
+                        reset = (constants.MUTATOR_ENABLE_MOVE, side_string, move[constants.ID], 'gorillatactics')
+                        mutator.apply_one(reset)
+                        resolved.append(reset)
+    finally:
+        mutator.reverse(resolved)
+    instruction.instructions = resolved
+    return instruction
 
 
 def get_instructions_from_move_special_effect(mutator, attacking_side, attacking_pokemon, defending_pokemon, move_name, instructions):
@@ -960,6 +1016,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
     else:
         sides = [constants.OPPONENT, constants.USER]
 
+    residual_start = len(instruction.instructions)
     mutator.apply(instruction.instructions)
 
     # weather damage - sand and hail
@@ -1212,11 +1269,22 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             mutator.apply_one(partially_trapped_damage_instruction)
             instruction.add_instruction(partially_trapped_damage_instruction)
 
+    # Residual damage can end Gas too. Resolve that restart before recording
+    # locks, without treating a move used under Gas as a Gorilla Tactics move.
+    if any(side.active.ability == 'gorillatactics' for side in (mutator.state.user, mutator.state.opponent)):
+        mutator.reverse(instruction.instructions)
+        resolve_gorilla_tactics_transitions(mutator, instruction, residual_start)
+        mutator.apply(instruction.instructions)
+
     # disable not used moves if choice-item is held
     for attacker in sides:
         side = get_side_from_state(mutator.state, attacker)
         pkmn = side.active
         opposing_pokemon = get_side_from_state(mutator.state, opposite_side[attacker]).active
+        gorilla_tactics_active = (
+            effective_ability(pkmn, opposing_pokemon) == 'gorillatactics'
+            and instruction.gorilla_tactics_active.get(attacker, True)
+        )
 
         if attacker == constants.USER:
             move = bot_move
@@ -1234,7 +1302,7 @@ def get_end_of_turn_instructions(mutator, instruction, bot_move, opponent_move, 
             constants.SWITCH_STRING not in move and
             constants.DRAG not in other_move.get(constants.FLAGS, {}) and
             move[constants.ID] not in constants.SWITCH_OUT_MOVES and
-            (effective_item(pkmn, opposing_pokemon) in constants.CHOICE_ITEMS or locking_move or effective_ability(pkmn, opposing_pokemon) == 'gorillatactics')
+            (effective_item(pkmn, opposing_pokemon) in constants.CHOICE_ITEMS or locking_move or gorilla_tactics_active)
         ):
             move_used = move[constants.ID]
             if locking_move:

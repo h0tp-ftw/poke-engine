@@ -478,13 +478,15 @@ class Pokemon(object):
 
 
 class TransposeInstruction:
-    __slots__ = ('percentage', 'instructions', 'frozen', 'damage_dealt')
+    __slots__ = ('percentage', 'instructions', 'frozen', 'damage_dealt', 'gorilla_tactics_active')
 
     def __init__(self, percentage, instructions, frozen=False, damage_dealt=0):
         self.percentage = percentage
         self.instructions = instructions
         self.frozen = frozen
         self.damage_dealt = damage_dealt
+        # Gas can end after a move that was attempted with this ability inactive.
+        self.gorilla_tactics_active = {}
 
     def update_percentage(self, modifier):
         self.percentage *= modifier
@@ -496,7 +498,9 @@ class TransposeInstruction:
         return self.instructions == other.instructions
 
     def __copy__(self):
-        return TransposeInstruction(self.percentage, copy(self.instructions), self.frozen, self.damage_dealt)
+        result = TransposeInstruction(self.percentage, copy(self.instructions), self.frozen, self.damage_dealt)
+        result.gorilla_tactics_active = self.gorilla_tactics_active.copy()
+        return result
 
     def __repr__(self):
         return "{}: {}".format(self.percentage, str(self.instructions))

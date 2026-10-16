@@ -222,11 +222,13 @@ def cannot_use_move(attacking_pokemon, attacking_move):
 
 
 def get_state_instructions_from_move(mutator, attacking_move, defending_move, attacker, defender, first_move, instructions):
+    instruction_start = len(instructions.instructions)
     instructions.frozen = False
     instructions.damage_dealt = 0
 
     if constants.SWITCH_STRING in attacking_move:
-        return [instruction_generator.get_instructions_from_switch(mutator, attacker, attacking_move[constants.SWITCH_STRING], instructions)]
+        result = instruction_generator.get_instructions_from_switch(mutator, attacker, attacking_move[constants.SWITCH_STRING], instructions)
+        return [instruction_generator.resolve_gorilla_tactics_transitions(mutator, result, instruction_start)]
 
     # if you are moving second, but you got phased on the first turn, your move will do nothing
     # this can happen if a move with equal priority to a phasing move (generally -6) is used by a slower pokemon and the faster pokemon uses a phasing move
@@ -238,6 +240,7 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
     defending_side = instruction_generator.get_side_from_state(mutator.state, defender)
     attacking_pokemon = attacking_side.active
     defending_pokemon = defending_side.active
+    instructions.gorilla_tactics_active[attacker] = effective_ability(attacking_pokemon, defending_pokemon) == 'gorillatactics'
     active_weather = mutator.state.weather
 
     if cannot_use_move(attacking_pokemon, attacking_move):
@@ -485,7 +488,10 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
 
         all_instructions = temp_instructions
 
-    return all_instructions
+    return [
+        instruction_generator.resolve_gorilla_tactics_transitions(mutator, instruction, instruction_start)
+        for instruction in all_instructions
+    ]
 
 
 def remove_duplicate_instructions(list_of_instructions):

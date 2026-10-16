@@ -497,3 +497,117 @@ def test_choice_lock_preserves_external_and_exhausted_move_flags(restriction):
     result = _eot(state)
     assert not any(i[0] in (C.MUTATOR_ENABLE_MOVE, C.MUTATOR_DISABLE_MOVE) for i in result.instructions)
     assert _snapshot(state) == before
+
+
+def _advance_lock_turn(state, user_move, opponent_move):
+    mutator = StateMutator(state)
+    before = _snapshot(state)
+    (result,) = get_all_state_instructions(mutator, user_move, opponent_move)
+    assert _snapshot(state) == before
+    mutator.apply(result.instructions)
+    after = _snapshot(state)
+    mutator.reverse(result.instructions)
+    assert _snapshot(state) == before
+    mutator.apply(result.instructions)
+    assert _snapshot(state) == after
+
+
+@pytest.mark.parametrize('side_name', [C.USER, C.OPPONENT])
+def test_gas_switch_out_restarts_gorilla_tactics_before_the_selected_move(monkeypatch, side_name):
+    monkeypatch.setattr(ShowdownConfig, 'damage_calc_type', 'average')
+    state = _state(ability='gorillatactics')
+    state.user.active.moves = [
+        {C.ID: name, C.DISABLED: False, C.CURRENT_PP: 10}
+        for name in ('splash', 'tackle', 'recover')
+    ]
+    state.opponent.reserve = {'weezing': _pokemon('weezing', ability='neutralizinggas')}
+    if side_name == C.OPPONENT:
+        state.user, state.opponent = state.opponent, state.user
+
+    def advance(move, other):
+        selected = (move, other) if side_name == C.USER else (other, move)
+        _advance_lock_turn(state, *selected)
+
+    def options():
+        return state.get_self_options(False) if side_name == C.USER else state.get_opponent_options()
+
+    advance('splash', 'splash')
+    assert options() == ['splash']
+    advance('splash', 'switch weezing')
+    assert options() == ['splash', 'tackle', 'recover']
+    advance('tackle', 'switch mew')
+    assert options() == ['tackle']
+
+
+@pytest.mark.parametrize('gas_end', ['knockout', 'gastroacid', 'residual'])
+def test_gas_ending_after_a_suppressed_move_clears_without_relocking(monkeypatch, gas_end):
+    monkeypatch.setattr(ShowdownConfig, 'damage_calc_type', 'average')
+    state = _state(ability='gorillatactics')
+    state.user.active.moves = [
+        {C.ID: name, C.DISABLED: name != 'splash', C.CURRENT_PP: 10,
+         **({'disabled_by': 'gorillatactics'} if name != 'splash' else {})}
+        for name in ('splash', 'tackle', 'gastroacid')
+    ]
+    state.opponent.active.ability = 'neutralizinggas'
+    if gas_end != 'gastroacid':
+        state.opponent.active.hp = 1
+    if gas_end == 'residual':
+        state.opponent.active.status = C.BURN
+    move = {'knockout': 'tackle', 'gastroacid': 'gastroacid', 'residual': 'splash'}[gas_end]
+    _advance_lock_turn(state, move, 'splash')
+    assert state.get_self_options(False) == ['splash', 'tackle', 'gastroacid']
+
+
+@pytest.mark.parametrize('choice_item', [None, 'choiceband'])
+def test_gas_restart_preserves_choice_external_and_zero_pp_restrictions(monkeypatch, choice_item):
+    monkeypatch.setattr(ShowdownConfig, 'damage_calc_type', 'average')
+    state = _state(ability='gorillatactics', item=choice_item)
+    state.user.active.moves = [
+        {C.ID: 'tackle', C.DISABLED: False, C.CURRENT_PP: 10},
+        {C.ID: 'earthquake', C.DISABLED: False, C.CURRENT_PP: 10},
+        {C.ID: 'recover', C.DISABLED: True, C.CURRENT_PP: 10},
+        {C.ID: 'surf', C.DISABLED: True, C.CURRENT_PP: 0},
+    ]
+    state.opponent.reserve = {'weezing': _pokemon('weezing', ability='neutralizinggas')}
+    _advance_lock_turn(state, 'tackle', 'splash')
+    _advance_lock_turn(state, 'tackle', 'switch weezing')
+    assert state.get_self_options(False) == (['tackle'] if choice_item else ['tackle', 'earthquake'])
+    _advance_lock_turn(state, 'tackle', 'switch mew')
+    assert state.get_self_options(False) == ['tackle']
+    assert state.user.active.moves[2:] == [
+        {C.ID: 'recover', C.DISABLED: True, C.CURRENT_PP: 10},
+        {C.ID: 'surf', C.DISABLED: True, C.CURRENT_PP: 0},
+    ]
+
+
+def test_gastro_acid_ends_gorilla_lock_and_gas_exit_does_not_restart_it(monkeypatch):
+    monkeypatch.setattr(ShowdownConfig, 'damage_calc_type', 'average')
+    state = _state(ability='gorillatactics')
+    state.user.active.moves = [
+        {C.ID: name, C.DISABLED: False, C.CURRENT_PP: 10}
+        for name in ('splash', 'tackle')
+    ]
+    state.opponent.reserve = {'weezing': _pokemon('weezing', ability='neutralizinggas')}
+    _advance_lock_turn(state, 'splash', 'splash')
+    _advance_lock_turn(state, 'splash', 'gastroacid')
+    assert not any(move[C.DISABLED] for move in state.user.active.moves)
+    _advance_lock_turn(state, 'tackle', 'switch weezing')
+    _advance_lock_turn(state, 'tackle', 'switch mew')
+    assert state.get_self_options(False) == ['splash', 'tackle']
+
+
+def test_ability_shield_resumes_gorilla_lock_without_restarting_it(monkeypatch):
+    monkeypatch.setattr(ShowdownConfig, 'damage_calc_type', 'average')
+    state = _state(ability='gorillatactics')
+    state.user.active.moves = [
+        {C.ID: name, C.DISABLED: False, C.CURRENT_PP: 10}
+        for name in ('splash', 'trick', 'recover')
+    ]
+    state.opponent.reserve = {
+        'weezing': _pokemon('weezing', ability='neutralizinggas', item='abilityshield'),
+    }
+    _advance_lock_turn(state, 'splash', 'splash')
+    _advance_lock_turn(state, 'splash', 'switch weezing')
+    _advance_lock_turn(state, 'trick', 'splash')
+    assert state.user.active.item == 'abilityshield'
+    assert state.get_self_options(False) == ['splash']
