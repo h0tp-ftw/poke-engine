@@ -7,6 +7,7 @@ from .data import all_move_json
 from . import instruction_generator
 from .damage_calculator import _calculate_damage
 from .objects import TransposeInstruction
+from .effect_state import effective_ability, effective_item, healing_allowed
 from .special_effects.abilities.modify_attack_against import ability_modify_attack_against
 from .special_effects.abilities.modify_attack_being_used import ability_modify_attack_being_used
 from .special_effects.items.modify_attack_against import item_modify_attack_against
@@ -30,46 +31,50 @@ def lookup_move(move_name):
 
 def get_effective_speed(state, side):
     boosted_speed = side.active.calculate_boosted_stats()[constants.SPEED]
+    opponent = state.opponent.active if side is state.user else state.user.active
+    ability = effective_ability(side.active, opponent)
+    item = effective_item(side.active, opponent)
 
-    if state.weather == constants.SUN and side.active.ability == 'chlorophyll':
+    if state.weather == constants.SUN and ability == 'chlorophyll':
         boosted_speed *= 2
-    elif state.weather == constants.RAIN and side.active.ability == 'swiftswim':
+    elif state.weather == constants.RAIN and ability == 'swiftswim':
         boosted_speed *= 2
-    elif state.weather == constants.SAND and side.active.ability == 'sandrush':
+    elif state.weather == constants.SAND and ability == 'sandrush':
         boosted_speed *= 2
-    elif state.weather in constants.HAIL_OR_SNOW and side.active.ability == 'slushrush':
-        boosted_speed *= 2
-
-    if state.field == constants.ELECTRIC_TERRAIN and side.active.ability == 'surgesurfer':
+    elif state.weather in constants.HAIL_OR_SNOW and ability == 'slushrush':
         boosted_speed *= 2
 
-    if side.active.ability == 'unburden' and not side.active.item:
+    if state.field == constants.ELECTRIC_TERRAIN and ability == 'surgesurfer':
         boosted_speed *= 2
-    elif side.active.ability == 'quickfeet' and side.active.status is not None:
+
+    if ability == 'unburden' and not side.active.item:
+        boosted_speed *= 2
+    elif ability == 'quickfeet' and side.active.status is not None:
         boosted_speed *= 1.5
 
     if side.side_conditions[constants.TAILWIND]:
         boosted_speed *= 2
 
-    if 'choicescarf' == side.active.item:
+    if 'choicescarf' == item:
         boosted_speed *= 1.5
 
-    if constants.PARALYZED == side.active.status and side.active.ability != 'quickfeet':
+    if constants.PARALYZED == side.active.status and ability != 'quickfeet':
         boosted_speed *= 0.5
 
-    if any(vs in side.active.volatile_status for vs in ["quarkdrivespe", "protosynthesisspe"]):
+    if ability in ('quarkdrive', 'protosynthesis') and ability + 'spe' in side.active.volatile_status:
         boosted_speed *= 1.5
 
     return int(boosted_speed)
 
 
-def get_effective_priority(side, move, field):
+def get_effective_priority(side, move, field, opponent=None):
     priority = move[constants.PRIORITY]
-    if side.active.ability == 'prankster' and move[constants.CATEGORY] == constants.STATUS:
+    ability = effective_ability(side.active, opponent)
+    if ability == 'prankster' and move[constants.CATEGORY] == constants.STATUS:
         priority += 1
-    elif side.active.ability == 'galewings' and (side.active.hp == side.active.maxhp) and ('flying' in move[constants.TYPE]):
+    elif ability == 'galewings' and (side.active.hp == side.active.maxhp) and ('flying' in move[constants.TYPE]):
         priority += 1
-    elif side.active.ability == 'triage' and constants.HEAL in move[constants.FLAGS]:
+    elif ability == 'triage' and constants.HEAL in move[constants.FLAGS]:
         priority += 3
     elif field == constants.GRASSY_TERRAIN and move[constants.ID] == 'grassyglide':
         priority += 1
@@ -97,8 +102,8 @@ def user_moves_first(state, user_move, opponent_move):
             return True
         return False
 
-    user_priority = get_effective_priority(state.user, user_move, state.field)
-    opponent_priority = get_effective_priority(state.opponent, opponent_move, state.field)
+    user_priority = get_effective_priority(state.user, user_move, state.field, state.opponent.active)
+    opponent_priority = get_effective_priority(state.opponent, opponent_move, state.field, state.user.active)
 
     if user_priority == opponent_priority:
         user_is_faster = user_effective_speed > opponent_effective_speed
@@ -172,7 +177,7 @@ def update_attacking_move(attacking_side, attacking_pokemon, defending_pokemon, 
     if (
             constants.PROTECT in attacking_move[constants.FLAGS] and
             any(vs in constants.PROTECT_VOLATILE_STATUSES for vs in defending_pokemon.volatile_status) and
-            not (attacking_pokemon.ability == 'unseenfist' and constants.CONTACT in attacking_move[constants.FLAGS])
+            not (effective_ability(attacking_pokemon, defending_pokemon) == 'unseenfist' and constants.CONTACT in attacking_move[constants.FLAGS])
     ):
         attacking_move = attacking_move.copy()
         attacking_move[constants.ACCURACY] = False
@@ -207,14 +212,23 @@ def update_attacking_move(attacking_side, attacking_pokemon, defending_pokemon, 
 
 
 def cannot_use_move(attacking_pokemon, attacking_move):
-    return constants.TAUNT in attacking_pokemon.volatile_status and attacking_move[constants.CATEGORY] not in constants.DAMAGING_CATEGORIES
+    return (
+        constants.TAUNT in attacking_pokemon.volatile_status
+        and attacking_move[constants.CATEGORY] not in constants.DAMAGING_CATEGORIES
+    ) or (
+        not healing_allowed(attacking_pokemon)
+        and attacking_move.get(constants.FLAGS, {}).get(constants.HEAL)
+    )
 
 
 def get_state_instructions_from_move(mutator, attacking_move, defending_move, attacker, defender, first_move, instructions):
+    instruction_start = len(instructions.instructions)
     instructions.frozen = False
+    instructions.damage_dealt = 0
 
     if constants.SWITCH_STRING in attacking_move:
-        return [instruction_generator.get_instructions_from_switch(mutator, attacker, attacking_move[constants.SWITCH_STRING], instructions)]
+        result = instruction_generator.get_instructions_from_switch(mutator, attacker, attacking_move[constants.SWITCH_STRING], instructions)
+        return [instruction_generator.resolve_gorilla_tactics_transitions(mutator, result, instruction_start)]
 
     # if you are moving second, but you got phased on the first turn, your move will do nothing
     # this can happen if a move with equal priority to a phasing move (generally -6) is used by a slower pokemon and the faster pokemon uses a phasing move
@@ -226,6 +240,7 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
     defending_side = instruction_generator.get_side_from_state(mutator.state, defender)
     attacking_pokemon = attacking_side.active
     defending_pokemon = defending_side.active
+    instructions.gorilla_tactics_active[attacker] = effective_ability(attacking_pokemon, defending_pokemon) == 'gorillatactics'
     active_weather = mutator.state.weather
 
     if cannot_use_move(attacking_pokemon, attacking_move):
@@ -256,6 +271,11 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
         mutator.state.weather,
         mutator.state.field
     )
+    bypass_substitute = bool(
+        attacking_move[constants.FLAGS].get(constants.SOUND)
+        or attacking_move[constants.FLAGS].get('bypasssub')
+        or effective_ability(attacking_pokemon, defending_pokemon) == 'infiltrator'
+    )
 
     instructions = instruction_generator.get_instructions_from_flinched(mutator, attacker, instructions)
 
@@ -280,6 +300,7 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
     side_condition = None
     hazard_clearing_move = None
     volatile_status = attacking_move.get(constants.VOLATILE_STATUS)
+    secondary_heal_block = False
 
     move_accuracy = min(100, attacking_move[constants.ACCURACY])
     move_status_accuracy = move_accuracy
@@ -307,6 +328,12 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
         attacking_move_secondary = attacking_move[constants.SECONDARY]
         attacking_move_self = attacking_move.get(constants.SELF)
         if attacking_move_secondary:
+            # Psychic Noise applies a two-turn Heal Block after landing damage.
+            # Keeping it after damage generation preserves misses and Sheer Force.
+            secondary_heal_block = (
+                attacking_move_secondary.get(constants.VOLATILE_STATUS) == constants.VOLATILE_HEAL_BLOCK
+                and attacking_move_secondary.get(constants.CHANCE) == 100
+            )
             # flinching (iron head)
             if attacking_move_secondary.get(constants.VOLATILE_STATUS) == constants.FLINCH and first_move:
                 flinch_accuracy = attacking_move_secondary.get(constants.CHANCE)
@@ -393,13 +420,26 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
     if volatile_status is not None:
         temp_instructions = []
         for instruction_set in all_instructions:
-            temp_instructions += instruction_generator.get_instructions_from_volatile_statuses(mutator, volatile_status, attacker, move_target, first_move, instruction_set)
+            temp_instructions += instruction_generator.get_instructions_from_volatile_statuses(
+                mutator, volatile_status, attacker, move_target, first_move,
+                instruction_set, bypass_substitute=bypass_substitute
+            )
         all_instructions = temp_instructions
 
     if move_status_effect is not None:
         temp_instructions = []
         for instruction_set in all_instructions:
             temp_instructions += instruction_generator.get_instructions_from_status_effects(mutator, move_status_target, move_status_effect, move_status_accuracy, instruction_set)
+        all_instructions = temp_instructions
+
+    if secondary_heal_block:
+        temp_instructions = []
+        for instruction_set in all_instructions:
+            temp_instructions += instruction_generator.get_instructions_from_volatile_statuses(
+                mutator, constants.VOLATILE_HEAL_BLOCK, attacker, move_target,
+                first_move, instruction_set, duration=2,
+                bypass_substitute=bypass_substitute
+            )
         all_instructions = temp_instructions
 
     if boosts is not None:
@@ -426,6 +466,11 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
             temp_instructions += instruction_generator.get_instructions_from_flinching_moves(defender, flinch_accuracy, first_move, instruction_set)
         all_instructions = temp_instructions
 
+    temp_instructions = []
+    for instruction_set in all_instructions:
+        temp_instructions += instruction_generator.get_instructions_from_item_after_move(mutator, attacker, attacking_move, instruction_set)
+    all_instructions = temp_instructions
+
     if constants.DRAG in attacking_move[constants.FLAGS] and attacking_move[constants.ACCURACY]:
         temp_instructions = []
         for instruction_set in all_instructions:
@@ -443,7 +488,10 @@ def get_state_instructions_from_move(mutator, attacking_move, defending_move, at
 
         all_instructions = temp_instructions
 
-    return all_instructions
+    return [
+        instruction_generator.resolve_gorilla_tactics_transitions(mutator, instruction, instruction_start)
+        for instruction in all_instructions
+    ]
 
 
 def remove_duplicate_instructions(list_of_instructions):

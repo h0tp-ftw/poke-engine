@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import ability_is_suppressed, effective_ability, effective_item
 
 from ...damage_calculator import is_super_effective
 
@@ -456,7 +457,7 @@ def soundproof(attacking_move, attacking_pokemon, defending_pokemon):
 
 
 def darkaura(attacking_move, attacking_pokemon, defending_pokemon):
-    if attacking_move[constants.TYPE] == 'dark' and attacking_pokemon.ability != 'aurabreak':
+    if attacking_move[constants.TYPE] == 'dark' and effective_ability(attacking_pokemon, defending_pokemon) != 'aurabreak':
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 1.33
 
@@ -464,7 +465,7 @@ def darkaura(attacking_move, attacking_pokemon, defending_pokemon):
 
 
 def fairyaura(attacking_move, attacking_pokemon, defending_pokemon):
-    if attacking_move[constants.TYPE] == 'fairy' and attacking_pokemon.ability != 'aurabreak':
+    if attacking_move[constants.TYPE] == 'fairy' and effective_ability(attacking_pokemon, defending_pokemon) != 'aurabreak':
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 1.33
 
@@ -588,9 +589,10 @@ ability_lookup = {
 
 def ability_modify_attack_against(ability_name, attacking_move, attacking_pokemon, defending_pokemon):
     if (
-        attacking_pokemon.ability == 'neutralizinggas' or
-        defending_pokemon.ability == 'neutralizinggas' or
-        attacking_pokemon.ability in constants.ABILITIES_THAT_IGNORE_OTHER_ABILITIES and defending_pokemon.ability in constants.BYPASSABLE_ABILITIES
+        ability_is_suppressed(defending_pokemon, attacking_pokemon) or
+        effective_ability(attacking_pokemon, defending_pokemon) in constants.ABILITIES_THAT_IGNORE_OTHER_ABILITIES and
+        ability_name in constants.BYPASSABLE_ABILITIES and
+        effective_item(defending_pokemon, attacking_pokemon) != "abilityshield"
     ):
         return attacking_move
     ability_func = ability_lookup.get(ability_name)

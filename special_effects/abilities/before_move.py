@@ -1,5 +1,6 @@
 from ...data import pokedex
 from ... import constants
+from ...effect_state import ability_is_suppressed
 from ...helpers import calculate_stats
 
 
@@ -69,6 +70,8 @@ libero = protean
 
 
 def ability_before_move(ability_name, state, attacking_side, attacking_move, attacking_pokemon, defending_pokemon):
+    if ability_is_suppressed(attacking_pokemon, defending_pokemon):
+        return None
     try:
         return globals()[ability_name](state, attacking_side, attacking_move, attacking_pokemon, defending_pokemon)
     except KeyError:

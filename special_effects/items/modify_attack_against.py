@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import item_is_suppressed
 
 from ...damage_calculator import is_super_effective
 
@@ -60,6 +61,8 @@ item_lookup = {
 
 
 def item_modify_attack_against(item_name, attacking_move, attacking_pokemon, defending_pokemon):
+    if item_is_suppressed(defending_pokemon, attacking_pokemon):
+        return attacking_move
     item_func = item_lookup.get(item_name)
     if item_func is not None:
         return item_func(attacking_move, attacking_pokemon, defending_pokemon)

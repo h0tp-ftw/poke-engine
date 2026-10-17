@@ -29,6 +29,7 @@ from .data.helpers import get_all_possible_moves_for_random_battle
 from .objects import State
 from .objects import Side
 from .objects import Pokemon as TransposePokemon
+from .effect_state import effective_item, healing_allowed
 
 from .helpers import remove_duplicate_spreads
 from .helpers import get_pokemon_info_from_condition
@@ -124,7 +125,7 @@ class Battle(ABC):
         The battles have the opponent's reserve pokemon's unknowns filled in
         The opponent's active pokemon in each of the battles has a different set"""
         battle_copy = deepcopy(self)
-        battle_copy.opponent.lock_moves()
+        battle_copy.opponent.lock_moves(battle_copy.user.active)
         battle_copy.user.lock_active_pkmn_first_turn_moves()
 
         if battle_copy.user.active.can_mega_evo:
@@ -190,7 +191,7 @@ class Battle(ABC):
                 logger.debug("Possible set for opponent's {}:\t{} {} {} {} {}".format(battle_copy.opponent.active.name, c[0][0], c[0][1], c[1], c[2], all_moves))
                 battles.append(new_battle)
 
-            new_battle.opponent.lock_moves()
+            new_battle.opponent.lock_moves(new_battle.user.active)
 
         return battles if battles else [battle_copy]
 
@@ -284,55 +285,81 @@ class Battler:
         self.account_name = None
 
         self.last_used_move = LastUsedMove('', '', 0)
+        self._locally_locked_moves = []
 
     def mega_revealed(self):
         return self.active.is_mega or any(p.is_mega for p in self.reserve)
+
+    @staticmethod
+    def _disable_move(move, source=None):
+        if not move.disabled:
+            move.disabled = True
+            move.disabled_by = source
+        elif source is None:
+            # A concurrent independent restriction must not be lifted when a
+            # Choice item is suppressed later in the native search state.
+            move.disabled_by = None
 
     def lock_active_pkmn_first_turn_moves(self):
         # disable firstimpression and fakeout if the last_used_move was not a switch
         if self.last_used_move.pokemon_name == self.active.name:
             for m in self.active.moves:
                 if m.name in constants.FIRST_TURN_MOVES:
-                    m.disabled = True
+                    self._disable_move(m)
 
-    def lock_active_pkmn_status_moves_if_active_has_assaultvest(self):
-        if self.active.item == 'assaultvest':
+    def lock_active_pkmn_status_moves_if_active_has_assaultvest(self, opponent=None):
+        if effective_item(self.active, opponent) == 'assaultvest':
             for m in self.active.moves:
                 if all_move_json[m.name][constants.CATEGORY] == constants.STATUS:
-                    m.disabled = True
+                    self._disable_move(m, 'assaultvest')
 
-    def choice_lock_moves(self):
+    def choice_lock_moves(self, opponent=None):
         # if the active pokemon has a choice item and their last used move was by this pokemon -> lock their other moves
-        if self.active.item in constants.CHOICE_ITEMS and self.last_used_move.pokemon_name == self.active.name:
+        if effective_item(self.active, opponent) in constants.CHOICE_ITEMS and self.last_used_move.pokemon_name == self.active.name:
             for m in self.active.moves:
                 if m.name != self.last_used_move.move:
-                    m.disabled = True
+                    self._disable_move(m, 'choice')
 
     def taunt_lock_moves(self):
         if constants.TAUNT in self.active.volatile_statuses:
             for m in self.active.moves:
                 if all_move_json[m.name][constants.CATEGORY] == constants.STATUS:
-                    m.disabled = True
+                    self._disable_move(m)
 
-    def lock_moves(self):
-        self.choice_lock_moves()
-        self.lock_active_pkmn_status_moves_if_active_has_assaultvest()
+    def heal_block_lock_moves(self):
+        if not healing_allowed(self.active):
+            for m in self.active.moves:
+                if all_move_json[m.name].get(constants.FLAGS, {}).get('heal'):
+                    self._disable_move(m, 'healblock')
+
+    def lock_moves(self, opponent=None):
+        # Recompute only restrictions added here. Request-supplied disabled moves
+        # (e.g. zero PP) remain disabled when an item or ability is suppressed.
+        for move in self._locally_locked_moves:
+            move.disabled = False
+            move.disabled_by = None
+        enabled_moves = [move for move in self.active.moves if not move.disabled]
+        self.choice_lock_moves(opponent)
+        self.lock_active_pkmn_status_moves_if_active_has_assaultvest(opponent)
         self.lock_active_pkmn_first_turn_moves()
         self.taunt_lock_moves()
+        self.heal_block_lock_moves()
+        self._locally_locked_moves = [move for move in enabled_moves if move.disabled]
 
     def from_json(self, user_json, first_turn=False):
 
         # user_json does not track boosts or volatile statuses
         # they must be taken from the current battle
         if first_turn:
-            existing_conditions = (None, None, None)
+            existing_conditions = (None,) * 6
         else:
             existing_conditions = (
                 self.active.name,
                 self.active.boosts,
                 self.active.volatile_statuses,
                 self.active.terastallized,
-                self.active.types
+                self.active.types,
+                self.active.volatile_status_durations,
             )
 
         try:
@@ -362,6 +389,7 @@ class Battler:
                 if existing_conditions[0] == pkmn.name:
                     pkmn.boosts = existing_conditions[1]
                     pkmn.volatile_statuses = existing_conditions[2]
+                    pkmn.volatile_status_durations = dict(existing_conditions[5])
                     if existing_conditions[3]:
                         pkmn.terastallized = True
                         pkmn.types = existing_conditions[4]
@@ -412,6 +440,7 @@ class Battler:
             else:
                 self.active.add_move(move[constants.ID])
             self.active.moves[-1].disabled = move.get(constants.DISABLED, False)
+            self.active.moves[-1].disabled_by = move.get('disabled_by')
             self.active.moves[-1].current_pp = move.get(constants.PP, 1)
 
             try:
@@ -481,6 +510,7 @@ class Pokemon:
         self.moves = []
         self.status = None
         self.volatile_statuses = []
+        self.volatile_status_durations = {}
         self.boosts = defaultdict(lambda: 0)
         self.can_mega_evo = False
         self.can_ultra_burst = False
@@ -498,12 +528,16 @@ class Pokemon:
         moves = self.moves
         boosts = self.boosts
         status = self.status
+        volatile_statuses = self.volatile_statuses
+        volatile_status_durations = self.volatile_status_durations
 
         self.__init__(new_pkmn_name, self.level)
         self.hp = round(hp_percent * self.max_hp)
         self.moves = moves
         self.boosts = boosts
         self.status = status
+        self.volatile_statuses = volatile_statuses
+        self.volatile_status_durations = volatile_status_durations
 
     def try_convert_to_mega(self, check_in_sets=False):
         if self.item != constants.UNKNOWN_ITEM:
@@ -709,6 +743,7 @@ class Pokemon:
             constants.STATUS: self.status,
             constants.TERASTALLIZED: self.terastallized,
             constants.VOLATILE_STATUS: set(self.volatile_statuses),
+            constants.VOLATILE_STATUS_DURATIONS: dict(self.volatile_status_durations),
             constants.MOVES: [m.to_dict() for m in self.moves]
         }
 
@@ -738,15 +773,19 @@ class Move:
         self.max_pp = int(move_json.get(constants.PP) * 1.6)
 
         self.disabled = False
+        self.disabled_by = None
         self.can_z = False
         self.current_pp = self.max_pp
 
     def to_dict(self):
-        return {
+        result = {
             "id": self.name,
             "disabled": self.disabled,
             "current_pp": self.current_pp
         }
+        if self.disabled_by:
+            result['disabled_by'] = self.disabled_by
+        return result
 
     def __eq__(self, other):
         return self.name == other.name

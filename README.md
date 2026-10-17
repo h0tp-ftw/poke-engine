@@ -223,3 +223,36 @@ Notice that damage calculations are constant per move. This is done for simplici
 This behaviour can be changed by setting a global configuration value.
 
 Obviously, if this is done then the number of instructions generated will become very large even for simple pairs of moves
+
+## Adding an after-move held item
+
+Add a handler and register its normalized item name in `item_lookup` in
+`special_effects/items/after_move.py`. The handler receives the current state,
+holder and opponent, modified move, and `damage_dealt`, then returns mutator
+instructions. No application-side hook is needed.
+
+The engine calls this stage after contact abilities, move effects and recovery,
+before drag or pivot switches. Each outcome carries its own landed damage, capped
+to the target's HP or Substitute and reset for the next move; misses, prevented
+moves and HP redistribution marked `SYNTHETIC_DAMAGE` carry zero. The dispatcher
+checks the current holder's item, HP and active item suppression. Handlers decide
+their own activation rules: Shell Bell requires positive damage, permits healing
+only outside Heal Block, and checks `SHEER_FORCE_BOOSTED`, recorded
+when Sheer Force actually removes a secondary effect.
+
+## Active effects and suppression
+
+Use `effective_ability(pokemon, opponent)`, `effective_item(pokemon, opponent)`
+and `healing_allowed(pokemon)` from `effect_state.py` when applying effects.
+These share Gastro Acid, live Neutralizing Gas, Klutz, Embargo and Heal Block
+checks across damage, recovery, move selection and residual effects. Keep the
+stored ability and item intact for identity, possession and removal checks.
+Mold Breaker remains a separate defensive bypass during an attack.
+
+Pokemon states carry an optional `volatile_status_durations` dictionary. Embargo
+and Heal Block last five turns; Psychic Noise applies two-turn Heal Block. Timer
+instructions record both the new and previous value so branch reversal restores
+the state exactly. Old states without timers remain loadable. Move dictionaries
+may also carry `disabled_by` to distinguish temporary Choice, Assault Vest or
+Heal Block restrictions from independently disabled moves. Preserve these fields
+when serializing a live battle.

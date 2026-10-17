@@ -69,7 +69,7 @@ class Scoring:
     }
 
 
-def evaluate_pokemon(pkmn):
+def evaluate_pokemon(pkmn, opponent=None):
     score = 0
     if pkmn.hp <= 0:
         return score
@@ -90,7 +90,7 @@ def evaluate_pokemon(pkmn):
         score += Scoring.POKEMON_STATIC_STATUSES[pkmn.status]
     except KeyError:
         # KeyError only happens when the status is BURN
-        score += Scoring.BURN(pkmn.burn_multiplier)
+        score += Scoring.BURN(pkmn.calculate_burn_multiplier(opponent))
 
     for vol_stat in pkmn.volatile_status:
         try:
@@ -109,13 +109,13 @@ def evaluate(state):
     opponent_alive_reserves_count = len([p for p in state.opponent.reserve.values() if p.hp > 0]) + (6-number_of_opponent_reserve_revealed)
 
     # evaluate the bot's pokemon
-    score += evaluate_pokemon(state.user.active)
+    score += evaluate_pokemon(state.user.active, state.opponent.active)
     for pkmn in state.user.reserve.values():
         this_pkmn_score = evaluate_pokemon(pkmn)
         score += this_pkmn_score
 
     # evaluate the opponent's visible pokemon
-    score -= evaluate_pokemon(state.opponent.active)
+    score -= evaluate_pokemon(state.opponent.active, state.user.active)
     for pkmn in state.opponent.reserve.values():
         this_pkmn_score = evaluate_pokemon(pkmn)
         score -= this_pkmn_score

@@ -112,7 +112,7 @@ VOLATILE_TAUNT = 'taunt'
 VOLATILE_TORMENT = 'torment'
 VOLATILE_IMPRISON = 'imprison'
 VOLATILE_THROAT_CHOP = 'throat_chop'
-VOLATILE_HEAL_BLOCK = 'heal_block'
+VOLATILE_HEAL_BLOCK = 'healblock'
 VOLATILE_EMBARGO = 'embargo'
 
 # Mental effects
@@ -395,7 +395,11 @@ DRAG = "drag"
 SOUND = "sound"
 
 VOLATILE_STATUS = "volatileStatus"
+VOLATILE_STATUS_DURATIONS = "volatile_status_durations"
+MUTATOR_SET_VOLATILE_DURATION = "set_volatile_duration"
 SECONDARY = "secondary"
+SHEER_FORCE_BOOSTED = "sheer_force_boosted"
+SYNTHETIC_DAMAGE = "synthetic_damage"
 CHANCE = "chance"
 LOCKED_MOVE = "lockedmove"
 

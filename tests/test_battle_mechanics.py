@@ -6485,7 +6485,6 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_APPLY_STATUS, constants.USER, constants.BURN),
-                    (constants.MUTATOR_DAMAGE, constants.USER, 13)
                 ],
                 False
             )
@@ -6519,8 +6518,6 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_APPLY_STATUS, constants.USER, constants.TOXIC),
-                    (constants.MUTATOR_DAMAGE, constants.USER, 13),
-                    (constants.MUTATOR_SIDE_START, constants.USER, constants.TOXIC_COUNT, 1)
                 ],
                 False
             )
@@ -9164,9 +9161,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 25),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -9240,9 +9237,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 37),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave', 'gorillatactics'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil', 'gorillatactics'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'gorillatactics'),
                 ],
                 False
             )
@@ -9267,9 +9264,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 37),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -9293,9 +9290,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.USER, 35),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -9319,7 +9316,7 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.USER, 35),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil', 'choice'),
                 ],
                 False
             )
@@ -9343,7 +9340,7 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 25),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -9368,9 +9365,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 74),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave', 'lockedmove'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil', 'lockedmove'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'lockedmove'),
                 ],
                 False
             )
@@ -9394,9 +9391,9 @@ class TestBattleMechanics(unittest.TestCase):
                 1,
                 [
                     (constants.MUTATOR_DAMAGE, constants.OPPONENT, 74),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'thunderwave', 'lockedmove'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'coil', 'lockedmove'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'sandattack', 'lockedmove'),
                 ],
                 False
             )
@@ -10142,8 +10139,8 @@ class TestBattleMechanics(unittest.TestCase):
                     (constants.MUTATOR_APPLY_VOLATILE_STATUS, constants.USER, 'roost'),
                     (constants.MUTATOR_DAMAGE, constants.USER, 35),
                     (constants.MUTATOR_REMOVE_VOLATILE_STATUS, constants.USER, 'roost'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'tackle'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'stringshot'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'tackle', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.USER, 'stringshot', 'choice'),
                 ],
                 False
             )
@@ -10446,9 +10443,9 @@ class TestBattleMechanics(unittest.TestCase):
                     (constants.MUTATOR_CHANGE_ITEM, constants.USER, 'lifeorb', 'choicescarf'),
                     (constants.MUTATOR_CHANGE_ITEM, constants.OPPONENT, 'choicescarf', 'lifeorb'),
                     (constants.MUTATOR_DAMAGE, constants.USER, 35),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -10475,9 +10472,9 @@ class TestBattleMechanics(unittest.TestCase):
                     (constants.MUTATOR_CHANGE_ITEM, constants.USER, 'lifeorb', 'choicescarf'),
                     (constants.MUTATOR_CHANGE_ITEM, constants.OPPONENT, 'choicescarf', 'lifeorb'),
                     (constants.MUTATOR_DAMAGE, constants.USER, 35),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil'),
-                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'thunderwave', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'coil', 'choice'),
+                    (constants.MUTATOR_DISABLE_MOVE, constants.OPPONENT, 'sandattack', 'choice'),
                 ],
                 False
             )
@@ -14059,6 +14056,7 @@ class TestUserMovesFirst(unittest.TestCase):
         opponent.active.speed = 101
 
         self.state.user.active.volatile_status = {"quarkdrivespe"}
+        self.state.user.active.ability = 'quarkdrive'
 
         self.assertTrue(user_moves_first(self.state, user_move, opponent_move))
 
@@ -14072,5 +14070,6 @@ class TestUserMovesFirst(unittest.TestCase):
         opponent.active.speed = 101
 
         self.state.user.active.volatile_status = {"protosynthesisspe"}
+        self.state.user.active.ability = 'protosynthesis'
 
         self.assertTrue(user_moves_first(self.state, user_move, opponent_move))

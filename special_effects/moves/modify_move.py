@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import effective_ability, effective_item
 from ...data import pokedex
 from ...damage_calculator import is_super_effective
 
@@ -27,7 +28,7 @@ def eruption(attacking_side, attacking_move, defending_move, attacking_pokemon, 
 
 def tailslap(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
     # skill-link will boost damage by 5x, so no need to do it again here if that is the pokemon's ability
-    if attacking_pokemon.ability != 'skilllink':
+    if effective_ability(attacking_pokemon, defending_pokemon) != 'skilllink':
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 3.2
     return attacking_move
@@ -138,19 +139,20 @@ def acrobatics(attacking_side, attacking_move, defending_move, attacking_pokemon
 
 
 def technoblast(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
-    if attacking_pokemon.item == 'burndrive':
+    item = effective_item(attacking_pokemon, defending_pokemon)
+    if item == 'burndrive':
         attacking_move = attacking_move.copy()
         attacking_move[constants.TYPE] = 'fire'
 
-    elif attacking_pokemon.item == 'chilldrive':
+    elif item == 'chilldrive':
         attacking_move = attacking_move.copy()
         attacking_move[constants.TYPE] = 'ice'
 
-    elif attacking_pokemon.item == 'dousedrive':
+    elif item == 'dousedrive':
         attacking_move = attacking_move.copy()
         attacking_move[constants.TYPE] = 'water'
 
-    elif attacking_pokemon.item == 'shockdrive':
+    elif item == 'shockdrive':
         attacking_move = attacking_move.copy()
         attacking_move[constants.TYPE] = 'electric'
 
@@ -158,9 +160,10 @@ def technoblast(attacking_side, attacking_move, defending_move, attacking_pokemo
 
 
 def multiattack(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
-    if attacking_pokemon.item is not None and attacking_pokemon.item.endswith('memory'):
+    item = effective_item(attacking_pokemon, defending_pokemon)
+    if item and item.endswith('memory'):
         attacking_move = attacking_move.copy()
-        attacking_move[constants.TYPE] = attacking_pokemon.item.replace('memory', '')
+        attacking_move[constants.TYPE] = item.replace('memory', '')
 
     return attacking_move
 
@@ -180,7 +183,7 @@ def ragingbull(attacking_side, attacking_move, defending_move, attacking_pokemon
 
 
 def knockoff(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
-    if defending_pokemon.item_can_be_removed():
+    if defending_pokemon.item_can_be_removed(attacking_pokemon):
         attacking_move = attacking_move.copy()
         attacking_move[constants.BASE_POWER] *= 1.5
     return attacking_move
@@ -274,6 +277,7 @@ def lowkick(attacking_side, attacking_move, defending_move, attacking_pokemon, d
 def painsplit(attacking_side, attacking_move, defending_move, attacking_pokemon, defending_pokemon, first_move, weather, terrain):
     # damage done to the opponent is handled in the damage calculation module
     attacking_move = attacking_move.copy()
+    attacking_move[constants.SYNTHETIC_DAMAGE] = True
     total_hp = attacking_pokemon.hp + defending_pokemon.hp
     damage_done = attacking_pokemon.hp - total_hp / 2
     damage_fraction = -1*damage_done / attacking_pokemon.maxhp
@@ -611,7 +615,7 @@ def populationbomb(attacking_side, attacking_move, defending_move, attacking_pok
     # This is a very bad hack that misses most interactions with this move
     # but I need to implement multi-hit moves to do this properly
     attacking_move = attacking_move.copy()
-    if attacking_side.active.item == "widelens":
+    if effective_item(attacking_pokemon, defending_pokemon) == "widelens":
         attacking_move[constants.BASE_POWER] = 180
     else:
         attacking_move[constants.BASE_POWER] = 105

@@ -1,4 +1,5 @@
 from ... import constants
+from ...effect_state import ability_is_suppressed, healing_allowed
 
 
 def poisonheal(state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
@@ -73,9 +74,12 @@ def icebody(state, attacking_side, attacking_pokemon, defending_side, defending_
 
 
 def ability_end_of_turn(ability_name, state, attacking_side, attacking_pokemon, defending_side, defending_pokemon):
-    if attacking_pokemon.ability == 'neutralizinggas' or defending_pokemon.ability == 'neutralizinggas' or not attacking_pokemon.hp:
+    if not attacking_pokemon.hp or ability_is_suppressed(attacking_pokemon, defending_pokemon):
         return None
     try:
-        return globals()[ability_name](state, attacking_side, attacking_pokemon, defending_side, defending_pokemon)
+        instruction = globals()[ability_name](state, attacking_side, attacking_pokemon, defending_side, defending_pokemon)
+        if instruction and instruction[0] == constants.MUTATOR_HEAL and not healing_allowed(attacking_pokemon):
+            return None
+        return instruction
     except KeyError:
         pass

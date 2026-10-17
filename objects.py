@@ -3,6 +3,7 @@ from copy import copy
 
 from . import constants
 from .data import all_move_json
+from .effect_state import effective_ability, effective_item, healing_allowed
 
 
 boost_multiplier_lookup = {
@@ -40,7 +41,7 @@ class State(object):
         if force_switch:
             possible_moves = []
         else:
-            possible_moves = [m[constants.ID] for m in self.user.active.moves if not m[constants.DISABLED]]
+            possible_moves = [m[constants.ID] for m in self.user.active.moves if not self.user.active.move_is_disabled(m, self.opponent.active)]
 
         if self.user.trapped(self.opponent.active):
             possible_switches = []
@@ -57,7 +58,7 @@ class State(object):
         if self.opponent.active.hp <= 0:
             possible_moves = []
         else:
-            possible_moves = [m[constants.ID] for m in self.opponent.active.moves if not m[constants.DISABLED]]
+            possible_moves = [m[constants.ID] for m in self.opponent.active.moves if not self.opponent.active.move_is_disabled(m, self.user.active)]
 
         if self.opponent.trapped(self.user.active):
             possible_switches = []
@@ -147,15 +148,16 @@ class Side(object):
         return switches
 
     def trapped(self, opponent_active):
-        if self.active.item == 'shedshell' or 'ghost' in self.active.types:
+        opponent_ability = effective_ability(opponent_active, self.active)
+        if effective_item(self.active, opponent_active) == 'shedshell' or 'ghost' in self.active.types:
             return False
         elif constants.PARTIALLY_TRAPPED in self.active.volatile_status:
             return True
-        elif opponent_active.ability == 'shadowtag':
+        elif opponent_ability == 'shadowtag':
             return True
-        elif opponent_active.ability == 'magnetpull' and 'steel' in self.active.types:
+        elif opponent_ability == 'magnetpull' and 'steel' in self.active.types:
             return True
-        elif opponent_active.ability == 'arenatrap' and self.active.is_grounded():
+        elif opponent_ability == 'arenatrap' and self.active.is_grounded(opponent_active):
             return True
         else:
             return False
@@ -205,6 +207,7 @@ class Pokemon(object):
         'evasion_boost',
         'status',
         'volatile_status',
+        'volatile_status_durations',
         'moves',
         'terastallized',
         'burn_multiplier'
@@ -236,7 +239,8 @@ class Pokemon(object):
         status=None,
         terastallized=False,
         volatile_status=None,
-        moves=None
+        moves=None,
+        volatile_status_durations=None
     ):
         self.id = identifier
         self.level = level
@@ -262,15 +266,16 @@ class Pokemon(object):
         self.status = status
         self.terastallized = terastallized
         self.volatile_status = volatile_status or set()
+        self.volatile_status_durations = dict(volatile_status_durations or {})
         self.moves = moves or list()
 
         # evaluation relies on a multiplier for the burn status
         # it is calculated here to save time during evaluation
         self.burn_multiplier = self.calculate_burn_multiplier()
 
-    def calculate_burn_multiplier(self):
+    def calculate_burn_multiplier(self, opponent=None):
         # this will result in a positive evaluation for a burned pokemon
-        if self.ability in ['guts', 'marvelscale', 'quickfeet']:
+        if effective_ability(self, opponent) in ['guts', 'marvelscale', 'quickfeet']:
             return -2
 
         # +1 to the multiplier for each physical move
@@ -327,10 +332,29 @@ class Pokemon(object):
         else:
             return None
 
-    def item_can_be_removed(self):
+    def move_is_disabled(self, move, opponent=None):
+        if move.get('current_pp', 1) <= 0:
+            return True
+        move_data = all_move_json[move[constants.ID]]
+        if not healing_allowed(self) and move_data.get(constants.FLAGS, {}).get('heal'):
+            return True
+        item = effective_item(self, opponent)
+        if item == 'assaultvest' and move_data[constants.CATEGORY] == constants.STATUS:
+            return True
+        if not move.get(constants.DISABLED, False):
+            return False
+        source = move.get('disabled_by')
+        if source in ('choice', 'gorillatactics', 'assaultvest', 'healblock'):
+            if source in ('choice', 'gorillatactics'):
+                return (item in constants.CHOICE_ITEMS
+                        or effective_ability(self, opponent) == 'gorillatactics')
+            return False
+        return True
+
+    def item_can_be_removed(self, opponent=None):
         if (
-            self.item is None or
-            self.ability == 'stickyhold' or
+            not self.item or
+            effective_ability(self, opponent) == 'stickyhold' or
             'substitute' in self.volatile_status or
             self.id in constants.POKEMON_CANNOT_HAVE_ITEMS_REMOVED or
             self.id.endswith('mega') and self.id != 'yanmega' or  # yeah this is hacky but who are you to judge?
@@ -371,7 +395,8 @@ class Pokemon(object):
             d[constants.STATUS],
             d[constants.TERASTALLIZED],
             d[constants.VOLATILE_STATUS],
-            d[constants.MOVES]
+            d[constants.MOVES],
+            d.get(constants.VOLATILE_STATUS_DURATIONS)
         )
 
     @classmethod
@@ -401,7 +426,8 @@ class Pokemon(object):
             d[constants.STATUS],
             d[constants.TERASTALLIZED],
             set(d[constants.VOLATILE_STATUS]),
-            d[constants.MOVES]
+            d[constants.MOVES],
+            d.get(constants.VOLATILE_STATUS_DURATIONS)
         )
 
     def calculate_boosted_stats(self):
@@ -413,8 +439,8 @@ class Pokemon(object):
             constants.SPEED: boost_multiplier_lookup[self.speed_boost] * self.speed,
         }
 
-    def is_grounded(self):
-        if 'flying' in self.types or self.ability == 'levitate' or self.item == 'airballoon':
+    def is_grounded(self, opponent=None):
+        if 'flying' in self.types or effective_ability(self, opponent) == 'levitate' or effective_item(self, opponent) == 'airballoon':
             return False
         return True
 
@@ -445,18 +471,22 @@ class Pokemon(object):
                 constants.STATUS: self.status,
                 constants.TERASTALLIZED: self.terastallized,
                 constants.VOLATILE_STATUS: list(self.volatile_status),
+                constants.VOLATILE_STATUS_DURATIONS: dict(self.volatile_status_durations),
                 constants.MOVES: self.moves
             }
         )
 
 
 class TransposeInstruction:
-    __slots__ = ('percentage', 'instructions', 'frozen')
+    __slots__ = ('percentage', 'instructions', 'frozen', 'damage_dealt', 'gorilla_tactics_active')
 
-    def __init__(self, percentage, instructions, frozen=False):
+    def __init__(self, percentage, instructions, frozen=False, damage_dealt=0):
         self.percentage = percentage
         self.instructions = instructions
         self.frozen = frozen
+        self.damage_dealt = damage_dealt
+        # Gas can end after a move that was attempted with this ability inactive.
+        self.gorilla_tactics_active = {}
 
     def update_percentage(self, modifier):
         self.percentage *= modifier
@@ -468,7 +498,9 @@ class TransposeInstruction:
         return self.instructions == other.instructions
 
     def __copy__(self):
-        return TransposeInstruction(self.percentage, copy(self.instructions), self.frozen)
+        result = TransposeInstruction(self.percentage, copy(self.instructions), self.frozen, self.damage_dealt)
+        result.gorilla_tactics_active = self.gorilla_tactics_active.copy()
+        return result
 
     def __repr__(self):
         return "{}: {}".format(self.percentage, str(self.instructions))
@@ -487,6 +519,7 @@ class StateMutator:
             constants.MUTATOR_SWITCH: self.switch,
             constants.MUTATOR_APPLY_VOLATILE_STATUS: self.apply_volatile_status,
             constants.MUTATOR_REMOVE_VOLATILE_STATUS: self.remove_volatile_status,
+            constants.MUTATOR_SET_VOLATILE_DURATION: self.set_volatile_duration,
             constants.MUTATOR_DAMAGE: self.damage,
             constants.MUTATOR_HEAL: self.heal,
             constants.MUTATOR_BOOST: self.boost,
@@ -513,6 +546,7 @@ class StateMutator:
             constants.MUTATOR_SWITCH: self.reverse_switch,
             constants.MUTATOR_APPLY_VOLATILE_STATUS: self.remove_volatile_status,
             constants.MUTATOR_REMOVE_VOLATILE_STATUS: self.apply_volatile_status,
+            constants.MUTATOR_SET_VOLATILE_DURATION: self.reverse_volatile_duration,
             constants.MUTATOR_DAMAGE: self.heal,
             constants.MUTATOR_HEAL: self.damage,
             constants.MUTATOR_BOOST: self.unboost,
@@ -553,7 +587,7 @@ class StateMutator:
     def get_side(self, side):
         return getattr(self.state, side)
 
-    def disable_move(self, side, move_name):
+    def disable_move(self, side, move_name, source=None):
         side = self.get_side(side)
         try:
             move = next(filter(lambda x: x[constants.ID] == move_name, side.active.moves))
@@ -561,8 +595,10 @@ class StateMutator:
             raise ValueError("{} not in pokemon's moves: {}".format(move_name, side.active.moves))
 
         move[constants.DISABLED] = True
+        if source is not None:
+            move['disabled_by'] = source
 
-    def enable_move(self, side, move_name):
+    def enable_move(self, side, move_name, source=None):
         side = self.get_side(side)
         try:
             move = next(filter(lambda x: x[constants.ID] == move_name, side.active.moves))
@@ -570,6 +606,7 @@ class StateMutator:
             raise ValueError("{} not in pokemon's moves: {}".format(move_name, side.active.moves))
 
         move[constants.DISABLED] = False
+        move.pop('disabled_by', None)
 
     def switch(self, side, _, switch_pokemon_name):
         # the second parameter to this function is the current active pokemon
@@ -593,6 +630,16 @@ class StateMutator:
     def damage(self, side, amount):
         side = self.get_side(side)
         side.active.hp -= amount
+
+    def set_volatile_duration(self, side, status, duration, _):
+        durations = self.get_side(side).active.volatile_status_durations
+        if duration:
+            durations[status] = duration
+        else:
+            durations.pop(status, None)
+
+    def reverse_volatile_duration(self, side, status, duration, previous):
+        self.set_volatile_duration(side, status, previous, duration)
 
     def heal(self, side, amount):
         side = self.get_side(side)
